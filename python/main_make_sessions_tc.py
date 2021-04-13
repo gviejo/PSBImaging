@@ -131,6 +131,8 @@ title("CellREG")
 
 idx = np.argsort(n_sessions_detected)[::-1]
 
+sys.exit()
+
 diffpeaks = pd.DataFrame(index = alltc.keys(), columns = np.arange(len(SF)))
 for n in alltc.keys():
 	tmp = np.where(allsi[n]>0.2)[0]

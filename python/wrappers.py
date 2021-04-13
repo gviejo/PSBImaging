@@ -10,7 +10,7 @@ import h5py
 Wrappers functions for miniscope data
 '''
 
-def loadCalciumData(path, fs =30, dims = (304, 304)):
+def loadCalciumData(path, fs =30, dims = (304, 304), flip_ttl = False):
 	"""
 
 	"""    
@@ -32,8 +32,8 @@ def loadCalciumData(path, fs =30, dims = (304, 304)):
 
 	files = os.listdir(path)
 
-	# laoding calcium trnasients
-	C_file = [f for f in files if 'C' in f][0]
+	# loading calcium transients
+	C_file = [f for f in files if 'C.csv' in f][0]
 	if len(C_file):
 		C = pd.read_csv(os.path.join(path, C_file), header = None)
 		C = C.T
@@ -56,12 +56,20 @@ def loadCalciumData(path, fs =30, dims = (304, 304)):
 		analogin = analogin.astype(np.int32)
 		timestep = np.arange(0, len(analogin))/20000
 
-		peaks,_ = scipy.signal.find_peaks(np.diff(analogin[:,0]), height=30000)		
-		peaks+=1
-		ttl_tracking = pd.Series(index = timestep[peaks], data = analogin[peaks,0])
+		if flip_ttl:
+			peaks,_ = scipy.signal.find_peaks(np.diff(analogin[:,1]), height=30000)
+			peaks+=1
+			ttl_tracking = pd.Series(index = timestep[peaks], data = analogin[peaks,1])
+			peaks,_ = scipy.signal.find_peaks(np.abs(np.diff(analogin[:,0])), height=30000, distance = 500)
+			ttl_miniscope = pd.Series(index = timestep[peaks], data = analogin[peaks,0])
 
-		peaks,_ = scipy.signal.find_peaks(np.abs(np.diff(analogin[:,1])), height=30000, distance = 500)
-		ttl_miniscope = pd.Series(index = timestep[peaks], data = analogin[peaks,1])
+		else:			
+			peaks,_ = scipy.signal.find_peaks(np.diff(analogin[:,0]), height=30000)		
+			peaks+=1
+			ttl_tracking = pd.Series(index = timestep[peaks], data = analogin[peaks,0])
+			peaks,_ = scipy.signal.find_peaks(np.abs(np.diff(analogin[:,1])), height=30000, distance = 500)
+			ttl_miniscope = pd.Series(index = timestep[peaks], data = analogin[peaks,1])
+
 	else:
 		print("No analogin file in ", path)
 		sys.exit()
@@ -94,8 +102,7 @@ def loadCalciumData(path, fs =30, dims = (304, 304)):
 	# loading spatial footprints
 	A_file = [f for f in files if '_A.csv' in f][0]
 	if len(A_file):		
-		A = pd.read_csv(os.path.join(path, A_file), header = None)
-		
+		A = pd.read_csv(os.path.join(path, A_file), header = None)		
 	else:
 		print("No calcium transient csv file in ", path)
 		sys.exit()
@@ -134,6 +141,8 @@ def loadCellReg(path, folder_name = 'CellReg', file_name = 'cellRegistered'):
 	for k, v in f.items():
 	    arrays[k] = v
 	cellreg = np.copy(np.array(arrays['cell_registered_struct']['cell_to_index_map']))
+	scores = np.copy(np.array(arrays['cell_registered_struct']['cell_scores']))
 	f.close()
 	cellreg = cellreg.T - 1 
-	return cellreg.astype(np.int)
+	scores = scores.flatten()
+	return cellreg.astype(np.int), scores

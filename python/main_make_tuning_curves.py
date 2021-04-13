@@ -45,7 +45,7 @@ def findHDCells(tuning_curves, z = 50, p = 0.0001 , m = 0):
 
 
 
-path = '/mnt/DataAdrienBig/PeyracheLabData/Guillaume/A0600/A0634/A0634-201124'
+path = '/mnt/DataNibelungen/Guillaume/A0600/A0642/A0642-210311'
 name = path.split('/')[-1]
  
 
