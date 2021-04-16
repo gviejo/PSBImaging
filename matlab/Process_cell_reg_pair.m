@@ -12,9 +12,10 @@ tline = fgetl(fid);
 allfile_names = [];
 while ischar(tline)            
     if ~strcmp(tline(1), '#')
-        names = split(tline, '/');
+        tmp = split(tline, ',');
+        names = split(tmp{1}, '/');
         fbasename = names{3};
-        allfile_names{end+1} = [data_directory '/' tline '/' fbasename '_A.csv'];            
+        allfile_names{end+1} = [data_directory '/' tmp{1} '/' fbasename '_A.csv'];            
     end
     tline = fgetl(fid);
 end

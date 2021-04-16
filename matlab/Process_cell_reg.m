@@ -1,10 +1,13 @@
+%data_directory = '/mnt/DataRAID/MINISCOPE';
+%results_directory = '/mnt/DataRAID/MINISCOPE/A0600/A0634/CellReg';
+%dims = 304;
+
 data_directory = '/mnt/DataRAID/MINISCOPE';
 results_directory = '/mnt/DataRAID/MINISCOPE/A0600/A0634/CellReg';
+dims = 225;
 
-dims = 304;
-
-figures_directory='/mnt/DataRAID/MINISCOPE/A0600/A0634/CellReg/Figures';
-figures_visibility='off'; % either 'on' or 'off' (in any case figures are saved)
+figures_directory = '/mnt/DataRAID/MINISCOPE/A0600/A0634/CellReg/Figures';
+figures_visibility = 'off'; % either 'on' or 'off' (in any case figures are saved)
 
 
 fid = fopen('/home/guillaume/PSBImaging/python/datasets_SAMERIGIDBODY.txt');
@@ -12,9 +15,10 @@ tline = fgetl(fid);
 file_names = [];
 while ischar(tline)            
     if ~strcmp(tline(1), '#')
-        names = split(tline, '/');
+        tmp = split(tline, ',');
+        names = split(tmp{1}, '/');
         fbasename = names{3};
-        file_names{end+1} = [data_directory '/' tline '/' fbasename '_A.csv'];            
+        file_names{end+1} = [data_directory '/' tmp{1} '/' fbasename '_A.csv'];            
     end
     tline = fgetl(fid);
 end
@@ -59,7 +63,7 @@ microns_per_pixel=2.35;
 alignment_type='Non-rigid'; % either 'Translations', 'Translations and Rotations' or 'Non-rigid'
 use_parallel_processing=true; % either true or false
 maximal_rotation=30; % in degrees - only relevant if 'Translations and Rotations' is used
-transformation_smoothness=2; % levels of non-rigid FOV transformation smoothness (range 0.5-3)
+transformation_smoothness=3; % levels of non-rigid FOV transformation smoothness (range 0.5-3)
 reference_session_index=1; 
 
 % Preparing the data for alignment:
@@ -175,6 +179,7 @@ disp('Done')
 
 % Defining the parameters for initial registration:
 initial_registration_type=best_model_string; % either 'Spatial correlation', 'Centroid distance', or 'best_model_string';
+%initial_registration_type='Spatial correlation'; % either 'Spatial correlation', 'Centroid distance', or 'best_model_string';
 % The threshold that corresponds to p_same=0.5 is automatically chosen.
 % if a specific distance/correlation threshold is to be used - change the
 % initial threshold manually in the next few lines.
