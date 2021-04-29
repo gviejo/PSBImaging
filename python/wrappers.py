@@ -94,6 +94,8 @@ def loadCalciumData(path, fs =30, dims = (304, 304), flip_ttl = False):
 		print("No position file in ", path)
 		sys.exit()
 
+	position = position.fillna(0)
+
 	position.index = nts.Ts(t = ttl_tracking.index[0:len(position)].values, time_units = 's').index
 	position = nts.TsdFrame(position)	
 	# bad

@@ -2,18 +2,21 @@
 %results_directory = '/mnt/DataRAID/MINISCOPE/A0600/A0634/CellReg';
 %dims = 304;
 
+group = 'A0600';
+number = 'A0642';
+
 data_directory = '/mnt/DataRAID/MINISCOPE';
-results_directory = '/mnt/DataRAID/MINISCOPE/A0600/A0634/CellReg';
+results_directory = ['/mnt/DataRAID/MINISCOPE/' group '/' number '/CellReg'];
 dims = 225;
 
-figures_directory = '/mnt/DataRAID/MINISCOPE/A0600/A0634/CellReg/Figures';
+figures_directory = ['/mnt/DataRAID/MINISCOPE/' group '/' number '/CellReg/Figures'];
 figures_visibility = 'off'; % either 'on' or 'off' (in any case figures are saved)
 
 
-fid = fopen('/home/guillaume/PSBImaging/python/datasets_SAMERIGIDBODY.txt');
+fid = fopen(['/home/guillaume/PSBImaging/python/datasets_' number '.txt']);
 tline = fgetl(fid);
 file_names = [];
-while ischar(tline)            
+while ischar(tline)
     if ~strcmp(tline(1), '#')
         tmp = split(tline, ',');
         names = split(tmp{1}, '/');

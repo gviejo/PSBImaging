@@ -14,10 +14,12 @@ from wrappers import *
 from functions import *
 from scipy.ndimage.filters import gaussian_filter
 
-path = '/mnt/DataAdrienBig/PeyracheLabData/Sofia/A6500/A6504/A6504-210408'
+path = '/mnt/DataAdrienBig/PeyracheLabData/Sofia/A6500/A6504/A6504-210412'
 name = path.split('/')[-1]
+
+dims = (225,225)
 			
-A, C, position 	= loadCalciumData(path)
+A, C, position 	= loadCalciumData(path, dims = dims)
 
 DFF 			= C.diff()
 DFF 			= DFF.fillna(0).as_dataframe()
@@ -38,7 +40,7 @@ for i, n in enumerate(tuningcurve.columns):
 
 
 
-dims = (304,304)
+
 
 
 af = np.zeros((A.shape[0], dims[0], dims[1]))
