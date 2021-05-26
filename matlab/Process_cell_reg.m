@@ -1,11 +1,10 @@
-%data_directory = '/mnt/DataRAID/MINISCOPE';
-%results_directory = '/mnt/DataRAID/MINISCOPE/A0600/A0634/CellReg';
-%dims = 304;
 
-group = 'A0600';
-number = 'A0642';
+%group = 'A0600';
+%number = 'A0642';
 
-data_directory = '/mnt/DataRAID/MINISCOPE';
+group = 'A6500';
+number = 'A6509';
+
 results_directory = ['/mnt/DataRAID/MINISCOPE/' group '/' number '/CellReg'];
 dims = 225;
 
@@ -20,8 +19,8 @@ while ischar(tline)
     if ~strcmp(tline(1), '#')
         tmp = split(tline, ',');
         names = split(tmp{1}, '/');
-        fbasename = names{3};
-        file_names{end+1} = [data_directory '/' tmp{1} '/' fbasename '_A.csv'];            
+        fbasename = names{end};
+        file_names{end+1} = [tmp{1} '/' fbasename '_A.csv'];            
     end
     tline = fgetl(fid);
 end

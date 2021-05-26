@@ -14,7 +14,8 @@ from wrappers import *
 from functions import *
 from scipy.ndimage.filters import gaussian_filter
 
-path = '/mnt/DataAdrienBig/PeyracheLabData/Sofia/A6500/A6504/A6504-210412'
+path = '/mnt/DataRAID/MINISCOPE/A6500/A6510/A6510-210517'
+
 name = path.split('/')[-1]
 
 dims = (225,225)
@@ -33,7 +34,7 @@ pf,extent 				= computePlaceFields(DFF, position[['x', 'z']], nb_bins = 20)
 
 figure()
 for i, n in enumerate(tuningcurve.columns):
-	subplot(10,14,i+1,projection='polar')
+	subplot(15,20,i+1,projection='polar')
 	plot(tuningcurve[n])
 	xticks([])
 	yticks([])
@@ -59,14 +60,14 @@ colorA = np.zeros((dims[0], dims[1], 3))
 colorA *= np.nan
 
 for i in range(len(af)):
-	colorA[af[i].T > 3] = RGB[i]
+	colorA[af[i].T > 8] = RGB[i]
 
 figure()
 imshow(colorA)
 
 figure()
 for i in range(len(pf)):
-	subplot(10,14,i+1)	
+	subplot(15,20,i+1)	
 	tmp = gaussian_filter(pf[i], 2)
 	imshow(tmp, extent = extent, cmap = 'jet')
 	xticks([])
