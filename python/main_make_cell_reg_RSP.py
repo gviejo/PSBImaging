@@ -20,7 +20,7 @@ dims = (225,225)
 
 
 data_directory = '/mnt/DataRAID/MINISCOPE'
-info = pd.read_csv('/home/guillaume/PSBImaging/python/datasets_A6509.txt', comment = '#', header = None)
+info = pd.read_csv('/home/guillaume/PSBImaging/python/datasets_A6510.txt', comment = '#', header = None)
 
 datasets = info[0].values
 envs = info[1].values
@@ -42,11 +42,14 @@ thr_rl = 2
 for i, s in enumerate(datasets):
 	print(s)
 	name 			= s.split('/')[-1]	
+	path = os.path.join(data_directory, s)
+	sys.exit()
 	if envs[i] != 'cylinder':
 		A, C, position 	= loadCalciumData(s, dims = dims, flip_ttl = True)		
 	else:
-		A, C, position 	= loadCalciumData(s,  dims = dims)
+		A, C, position 	= loadCalciumData(path,  dims = dims)
 
+	
 	DFF 			= C.diff()
 	DFF 			= DFF.fillna(0).as_dataframe()
 	DFF[DFF<0]		= 0

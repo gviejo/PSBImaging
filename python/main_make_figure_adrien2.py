@@ -14,7 +14,7 @@ import cv2
 from matplotlib.gridspec import GridSpec
 
 # data_directory = '/mnt/DataAdrienBig/PeyracheLabData/Guillaume'
-data_directory = '/mnt/DataRAID/MINISCOPE'
+data_directory = '/mnt/Hypernova/Guillaume'
 #datasets = np.loadtxt('/home/guillaume/PSBImaging/python/datasets_SAMERIGIDBODY.txt', delimiter = '\n', dtype = str, comments = '#')
 info = pd.read_csv('/home/guillaume/PSBImaging/python/datasets_SAMERIGIDBODY.txt', comment = '#', header = None)
 datasets = info[0].values
@@ -280,4 +280,4 @@ title('Pairwise Angular Difference across days')
 legend()
 
 
-savefig('../figures/figure_adrien2.pdf', format = 'pdf', dpi = 200, bbox_inches = 'tight')
+savefig('../figures/figure_adrien2.eps', format = 'eps', dpi = 300, bbox_inches = 'tight')

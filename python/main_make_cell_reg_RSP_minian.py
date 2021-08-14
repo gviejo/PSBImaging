@@ -11,26 +11,36 @@ import scipy.signal
 from pycircstat.descriptive import mean as circmean
 from matplotlib.colors import hsv_to_rgb
 import cv2
-from matplotlib.gridspec import GridSpec
+from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
 from itertools import product, combinations
 from scipy.stats import norm
 from scipy.ndimage.filters import gaussian_filter
 
-dims = (225,225)
-
+#dims = (304,304)
+dims = (181,203)
 
 data_directory = '/mnt/DataRAID/MINISCOPE'
-# info = pd.read_csv('/home/guillaume/PSBImaging/python/datasets_A0642.txt', comment = '#', header = None)
 
-info = pd.read_csv('/home/guillaume/PSBImaging/python/Miniscope Recordings_A0634.csv', comment = '#', header = 5, delimiter = ',', index_col=False, usecols = [0,2,3])
+fbasename = 'A6509'
+info = pd.read_csv('/home/guillaume/PSBImaging/python/datasets_'+fbasename+'.csv', comment = '#', header = 5, delimiter = ',', index_col=False, usecols = [0,2,3,4]).dropna()
+paths = [os.path.join(data_directory, fbasename[0:3] + '00', fbasename, 'minian', fbasename+'-'+info.loc[i,'Recording day'][2:].replace('/', '')) for i in info.index]
+sessions = [fbasename+'-'+info.loc[i,'Recording day'][2:].replace('/', '') for i in info.index]
+info['paths'] = paths
+info['sessions'] = sessions
+info = info.set_index('sessions')
 
-info = info.dropna()
+#############################################################################################
+# Cell Registration
+#############################################################################################
+cellreg = pd.read_csv(os.path.join(data_directory, fbasename[0:3] + '00', fbasename, 'minian', 'minian_reg.csv'), index_col = [0])
 
-info['path'] = []
+# intersecting info and cellreg sessions
+sessions = np.intersect1d(info.index.values, cellreg.columns.values)
 
+info = info.loc[sessions]
+cellreg = cellreg[sessions]
 
-datasets = info[0].values
-envs = info[1].values
+n_sessions_detected = cellreg.notna().sum(1)
 
 SF = {}
 TC = {}
@@ -46,111 +56,125 @@ thr_rl = 2
 
 
 
-for i, s in enumerate(datasets):
-	print(s)
-	name 			= s.split('/')[-1]
-	path 			= os.path.join(data_directory, s)
-	if envs[i] != 'cylinder':
-		A, C, position 	= loadCalciumData(path, dims = dims, flip_ttl = True)		
-	else:
-		A, C, position 	= loadCalciumData(path,  dims = dims)
+for i, s in enumerate(sessions):
+	path 			= info.loc[s,'paths']	
+	if os.path.exists(path):
+		print(path)
+		name 			= os.path.basename(path)		
+		A, C, position 	= loadCalciumData(path, dims = dims)
+		
+		
+		DFF 			= C.diff()
+		DFF 			= DFF.fillna(0).as_dataframe()
+		DFF[DFF<0]		= 0
 
-	DFF 			= C.diff()
-	DFF 			= DFF.fillna(0).as_dataframe()
-	DFF[DFF<0]		= 0
+		tuningcurve		= computeCalciumTuningCurves(DFF, position['ry'], norm=True)
+		tuningcurve 	= smoothAngularTuningCurves(tuningcurve)			
+		peaks 			= pd.Series(index=tuningcurve.keys(),
+			data = np.array([circmean(tuningcurve[i].index.values, tuningcurve[i].values) for i in tuningcurve.keys()]))	
+		si 				= computeSpatialInfo(tuningcurve, position['ry'])		
+		stat 			= computeRayleighTest(tuningcurve)	
+		
+		tcurves2 = []
+		DFF2 = np.array_split(DFF,2)	
+		for j in range(2):		
+			tcurves_half	= computeCalciumTuningCurves(DFF2[j], position['ry'], norm=True)
+			tcurves_half 	= smoothAngularTuningCurves(tcurves_half)	
+			tcurves2.append(tcurves_half)
 
-	tuningcurve		= computeCalciumTuningCurves(DFF, position['ry'], norm=True)
-	tuningcurve 	= smoothAngularTuningCurves(tuningcurve)			
-	peaks 			= pd.Series(index=tuningcurve.keys(),
-		data = np.array([circmean(tuningcurve[i].index.values, tuningcurve[i].values) for i in tuningcurve.keys()]))	
-	si 				= computeSpatialInfo(tuningcurve, position['ry'])		
-	stat 			= computeRayleighTest(tuningcurve)	
-	
-	tcurves2 = []
-	DFF2 = np.array_split(DFF,2)	
-	for j in range(2):		
-		tcurves_half	= computeCalciumTuningCurves(DFF2[j], position['ry'], norm=True)
-		tcurves_half 	= smoothAngularTuningCurves(tcurves_half)	
-		tcurves2.append(tcurves_half)
+		# diff = np.sum(np.abs(tcurves2[0] - tcurves2[1]), 0)	
+		diff = {}
+		for j in tuningcurve.columns:
+			diff[j] = np.corrcoef(tcurves2[0][j], tcurves2[1][j])[0,1]
+		diff = pd.Series(diff)	
 
-	# diff = np.sum(np.abs(tcurves2[0] - tcurves2[1]), 0)	
-	diff = {}
-	for j in tuningcurve.columns:
-		diff[j] = np.corrcoef(tcurves2[0][j], tcurves2[1][j])[0,1]
-	diff = pd.Series(diff)	
+		pf, extent			= computePlaceFields(DFF, position[['x', 'z']], 15)
+		
 
-	pf, extent			= computePlaceFields(DFF, position[['x', 'z']], 15)
-	
-
-	# tokeep 			= si[(si>thr_si).values].index.values
-	tokeep 			= stat[(stat['z']>thr_rl).values].index.values	
-	SI[i] 			= si
-	SF[i] 			= A
-	TC[i] 			= tuningcurve
-	HD[i] 			= tokeep
-	PK[i] 			= peaks
-	RL[i]			= stat
-	stab_tc[i]	 	= diff
-	PF[i] 			= pf
-
+		# tokeep 			= si[(si>thr_si).values].index.values
+		tokeep 			= stat[(stat['z']>thr_rl).values].index.values	
+		SI[i] 			= si
+		SF[i] 			= A
+		TC[i] 			= tuningcurve
+		HD[i] 			= tokeep
+		PK[i] 			= peaks
+		RL[i]			= stat
+		stab_tc[i]	 	= diff
+		PF[i] 			= pf
 
 
-cellreg, scores = loadCellReg(os.path.join(data_directory, '/'.join(datasets[0].split('/')[0:-1])))
 
-n_sessions_detected = np.sum(cellreg!=-1, 1)
 
-scores = pd.Series(index = np.where(n_sessions_detected>1)[0], data = scores[np.where(n_sessions_detected>1)[0]])
+figure()
+count = 1
+for i in SF.keys():
+	ax = subplot(int(np.sqrt(len(SF)))+1,int(np.sqrt(len(SF)))+1,count)
+	# a = (SF[i]>np.percentile(SF[i],0.001)).sum(0)	
+	imshow(SF[i].sum(0), cmap = 'viridis')
+	count += 1
+
+
+cellreg = cellreg.fillna(-1).astype(np.int).values
+
+tokeep = np.where(n_sessions_detected > 1)[0]
 
 allst = {}
-for i in np.where(n_sessions_detected>1)[0]:
+for i in tokeep:
 	allst[i] = pd.Series(index = np.arange(cellreg.shape[1]))
 	for j in np.where(cellreg[i]!=-1)[0]:		
 		allst[i][j] = stab_tc[j].loc[cellreg[i,j]]		
 
 allst = pd.concat(allst, 1).T
 
-# Selecting neurons with stable tuning curves
-#allst[allst<0.4] = np.nan
-# Selectingneurons with good cellreg scores
-# allst = allst.loc[scores[scores>np.percentile(scores,50)].index.values]
-# tokeep = allst.index.values
-# scores = scores.loc[tokeep]
 
-tokeep = np.where(n_sessions_detected == np.max(n_sessions_detected))[0]
-#tokeep = np.where(n_sessions_detected >= 2)[0]
+
+# Selecting neurons with stable tuning curves
+allst[allst<0.3] = np.nan
+
+tokeep = allst[allst.notna().any(1)].index.values
+
+
 
 
 alltc = {}
 allsi = {}
 allpf = {}
 for i in tokeep:
-	alltc[i] = pd.DataFrame(columns = np.arange(cellreg.shape[1]))
-	allsi[i] = pd.Series(index = np.arange(cellreg.shape[1]))	
-	allpf[i] = np.zeros((cellreg.shape[1], PF[0].shape[1], PF[0].shape[2],))
+	alltc[i] = pd.DataFrame(columns = sessions)
+	allsi[i] = pd.Series(index = sessions)	
+	allpf[i] = np.zeros((len(sessions), PF[0].shape[1], PF[0].shape[2],))
 	for j in np.where(cellreg[i]!=-1)[0]:
-		alltc[i][j] = TC[j][cellreg[i,j]]
-		allsi[i][j] = SI[j].loc[cellreg[i,j]]		
+		alltc[i][sessions[j]] = TC[j][cellreg[i,j]]
+		allsi[i].loc[sessions[j]] = SI[j].loc[cellreg[i,j]].values
 		allpf[i][j] = PF[j][cellreg[i,j]]
 
+#####################################################################################
+# PLOT ALL TUNING CURVES
+#####################################################################################
+index = np.array(list(alltc.keys()))[0:20]
 
+rigs = ['Circular', 'Square', '8-arm maze', 'Open field']
 
+figure()
+for i, n in enumerate(index):	
+	ax = subplot(int(np.ceil(np.sqrt(len(index))))-1,int(np.ceil(np.sqrt(len(index)))),i+1)
+	gs = GridSpecFromSubplotSpec(1,len(rigs),ax)
+	tmp = alltc[n].dropna(1, 'all')
+	grp = info.loc[tmp.columns].groupby('Rig').groups
+	for j, m in enumerate(rigs):
+		if m in grp.keys():
+			subplot(gs[0,j], projection = 'polar')
+			plot(alltc[n][grp[m]], color = cm.rainbow(np.linspace(0,1,len(rigs)))[j])
+			xticks([])
+			yticks([])
 
-# figure()
-# plot(scores, allst.mean(1), 'o')
-# xlabel('Cellreg score')
-# ylabel('TC stability')
-# axvline(np.percentile(scores, 50))
-# axhline(np.percentile(allst.mean(1), 30))
-
-
-
-
+sys.exit()
 
 ####################################################################################
 # DIFF PEAKS + SESSIONS
 ####################################################################################
-diffpeaks = computePeaksAngularDifference(alltc, sessions = [0,1])
-diffsess = computePairwiseAngularDifference(alltc, sessions = np.arange(len(SF)))
+diffpeaks = computePeaksAngularDifference(alltc, sessions = sessions)
+diffsess = computePairwiseAngularDifference(alltc, sessions = sessions )
 
 
 
@@ -161,15 +185,15 @@ rnddiffsess = []
 for k in range(20):
 	print(k)
 	rndcellreg = np.copy(cellreg[list(alltc.keys())])
-	for t in range(rndcellreg.shape[1]):		
+	for t in range(rndcellreg.shape[1]):
 		np.random.shuffle(rndcellreg[:,t])
 	rndtc = {}
 	for i in range(len(rndcellreg)):
-		rndtc[i] = pd.DataFrame(columns = np.arange(rndcellreg.shape[1]))
+		rndtc[i] = pd.DataFrame(columns = sessions)
 		for j in np.where(rndcellreg[i]!=-1)[0]:
-			rndtc[i][j] = TC[j][rndcellreg[i,j]]
+			rndtc[i][sessions[j]] = TC[j][rndcellreg[i,j]]
 
-	rnddiffsess.append(computePairwiseAngularDifference(rndtc, sessions = np.arange(len(SF))))
+	rnddiffsess.append(computePairwiseAngularDifference(rndtc, sessions = sessions))
 
 rnddiffsess = pd.concat(rnddiffsess)
 
@@ -177,98 +201,115 @@ rnddiffsess = pd.concat(rnddiffsess)
 # PLOT ALL TUNING CURVES
 #####################################################################################
 index = np.array(list(alltc.keys()))
-index = index[np.argsort(n_sessions_detected[index])[::-1]][0:10]
-figure()
-gs = GridSpec(len(index),n_sessions_detected.max())
-for i,n in enumerate(index):
-	for j in range(n_sessions_detected.max()):
-		subplot(gs[i,j],projection = 'polar')
-		plot(alltc[n][j])
-		xticks([])
-		yticks([])
 
-figure()
-index = alltc.keys()
-for i, n in enumerate(index):
-	subplot(int(np.ceil(np.sqrt(len(index)))),int(np.ceil(np.sqrt(len(index)))),i+1, projection='polar')
-	for j in alltc[n].columns:
-		plot(alltc[n][j])
-	xticks([])
-	yticks([])
+# figure()
+# gs = GridSpec(len(index),n_sessions_detected.max())
+# for i,n in enumerate(index):
+# 	for j in range(n_sessions_detected.max()):
+# 		subplot(gs[i,j],projection = 'polar')
+# 		plot(alltc[n][sessions[j]])
+# 		xticks([])
+# 		yticks([])
+
+# figure()
+# index = alltc.keys()
+# for i, n in enumerate(index):
+# 	subplot(int(np.ceil(np.sqrt(len(index)))),int(np.ceil(np.sqrt(len(index)))),i+1, projection='polar')
+# 	for j in alltc[n].columns:
+# 		plot(alltc[n][j])
+# 	xticks([])
+# 	yticks([])
 
 
-figure()
-index = list(alltc.keys())
-gs = GridSpec(int(np.ceil(np.sqrt(len(index)))),int(np.ceil(np.sqrt(len(index)))))
-count = 0
-for i in range(int(np.ceil(np.sqrt(len(index))))):
-	for j in range(int(np.ceil(np.sqrt(len(index))))):
-		gs2 = gs[i,j].subgridspec(1,2)
-		n = index[count]
-		subplot(gs2[0,0], projection='polar')
-		for k in alltc[n].columns:
-			plot(alltc[n][k])
-		xticks([])
-		yticks([])
-		tmp = []		
-		for k in range(len(allpf[n])):
-			tmp.append(gaussian_filter(allpf[n][k], 2))
-		tmp = np.array(tmp)
-		gs3 = gs2[0,1].subgridspec(2,2)
-		xp, yp = ([0,0,1,1],[0,1,0,1])
-		for k in range(len(allpf[n])):
-			subplot(gs3[xp[k],yp[k]])
-			imshow(tmp[k], cmap = 'jet')#, vmin = tmp.min(), vmax = tmp.max())
-			xticks([])
-			yticks([])
-		count += 1
-		if count == len(index):
-			break
-	if count == len(index):
-		break
+# figure()
+# index = list(alltc.keys())
+# gs = GridSpec(int(np.ceil(np.sqrt(len(index)))),int(np.ceil(np.sqrt(len(index)))))
+# count = 0
+# for i in range(int(np.ceil(np.sqrt(len(index))))):
+# 	for j in range(int(np.ceil(np.sqrt(len(index))))):
+# 		gs2 = gs[i,j].subgridspec(1,2)
+# 		n = index[count]
+# 		subplot(gs2[0,0], projection='polar')
+# 		for k in alltc[n].columns:
+# 			plot(alltc[n][k])
+# 		xticks([])
+# 		yticks([])
+# 		tmp = []		
+# 		for k in range(len(allpf[n])):
+# 			tmp.append(gaussian_filter(allpf[n][k], 2))
+# 		tmp = np.array(tmp)
+# 		gs3 = gs2[0,1].subgridspec(2,2)
+# 		xp, yp = ([0,0,1,1],[0,1,0,1])
+# 		for k in range(len(allpf[n])):
+# 			subplot(gs3[xp[k],yp[k]])
+# 			imshow(tmp[k], cmap = 'jet')#, vmin = tmp.min(), vmax = tmp.max())
+# 			xticks([])
+# 			yticks([])
+# 		count += 1
+# 		if count == len(index):
+# 			break
+# 	if count == len(index):
+# 		break
 
-sys.exit()
+
 
 
 #####################################################################################
 # CELL REG ANGULAR DIFFERENCE OF PREFERRED DIRECTION STARTING AT FIRST SESSION
 #####################################################################################
 # index = tokeep[np.where(n_sessions_detected[tokeep] == len(SF))[0]]
-env1 = np.where(envs == 'cylinder')[0]
-env2 = np.where(envs == 'large')[0]
-sinter 	= list(product(env1,env2))
-scyl	= list(combinations(env1,2))
-slrg	= list(combinations(env2,2))
+envs = info.loc[sessions].groupby('Rig').groups
+
+sinter = []
+for a, b  in combinations(envs.keys(), 2):
+	for p in product(envs[a], envs[b]):
+		sinter.append(tuple(np.sort(p)))
+
+swithin = {s:list(combinations(envs[s], 2)) for s in envs.keys()}
 
 
 figure()
-nb_bins = 15
+nb_bins = 10
 clrs = ['blue', 'red', 'green']
-subplot(221)
-tmp = diffsess[scyl].values.astype(np.float32).flatten()
-tmp2 = rnddiffsess[scyl].values.astype(np.float32).flatten()
-title('Cylindre')
-hist(np.rad2deg(tmp), np.linspace(0, 180, nb_bins), density=True, color = clrs[0], alpha = 0.5, histtype = 'step')
-hist(np.rad2deg(tmp2), np.linspace(0, 180, nb_bins), density=True, color = 'grey', alpha = 0.5, histtype = 'step')
-xlim(0, 180)
-subplot(222)
-tmp = diffsess[slrg].values.astype(np.float32).flatten()
-tmp2 = rnddiffsess[slrg].values.astype(np.float32).flatten()
-title('Large')
-hist(np.rad2deg(tmp), np.linspace(0, 180, nb_bins), density=True, color = clrs[1], alpha = 0.5, histtype = 'step')
-hist(np.rad2deg(tmp2), np.linspace(0, 180, nb_bins), density=True, color = 'grey', alpha = 0.5, histtype = 'step')
-xlim(0, 180)
-subplot(223)
+for i, e in enumerate(swithin.keys()):
+	subplot(2,2,i+1)
+	tmp = diffsess[swithin[e]].values.astype(np.float32).flatten()
+	tmp2 = rnddiffsess[swithin[e]].values.astype(np.float32).flatten()
+	title(e)
+	hist(np.rad2deg(tmp), np.linspace(0, 180, nb_bins), density=True, color = clrs[0], alpha = 0.5, histtype = 'step')
+	hist(np.rad2deg(tmp2), np.linspace(0, 180, nb_bins), density=True, color = 'grey', alpha = 0.5, histtype = 'step')
+	xlim(0, 180)
+subplot(224)
 tmp = diffsess[sinter].values.astype(np.float32).flatten()
 tmp2 = rnddiffsess[sinter].values.astype(np.float32).flatten()
 title('Inter')
 hist(np.rad2deg(tmp), np.linspace(0, 180, nb_bins), density=True, color = clrs[2], alpha = 0.5, histtype = 'step')
 hist(np.rad2deg(tmp2), np.linspace(0, 180, nb_bins), density=True, color = 'grey', alpha = 0.5, histtype = 'step')
 xlim(0, 180)
-subplot(224)
-for i, gr in enumerate([scyl, slrg, sinter]):
-	tmp, bin_edges = np.histogram(diffsess[gr].values.astype(np.float32).flatten(), np.linspace(0, np.pi, nb_bins), density=True)
-	plot(bin_edges[0:-1], tmp*np.diff(bin_edges), color = clrs[i])
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

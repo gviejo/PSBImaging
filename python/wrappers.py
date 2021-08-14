@@ -10,25 +10,25 @@ import h5py
 Wrappers functions for miniscope data
 '''
 
-def loadCalciumData(path, fs =30, dims = (304, 304), flip_ttl = False):
+def loadCalciumData(path, fs =30, dims = (304, 304)):
 	"""
 
 	"""    
 	if not os.path.exists(path):
 		print("The path "+path+" doesn't exist; Exiting ...")
 		sys.exit()    
-	new_path = os.path.join(path, 'Analysis/')
-	if os.path.exists(new_path):		
-		files        = os.listdir(new_path)
-		# TODO MAKE CONDITIONS
-		C = pd.read_hdf(os.path.join(new_path, 'C.h5'))
-		A = pd.read_hdf(os.path.join(new_path, 'A.h5'))
-		position = pd.read_hdf(os.path.join(new_path, 'position.h5'))
-		position.columns = ['ry', 'rx', 'rz', 'x', 'y', 'z']
-		A = A.values
-		A = A.T.reshape(A.shape[1], dims[0], dims[1])		
+	# new_path = os.path.join(path, 'Analysis/')
+	# if os.path.exists(new_path):		
+	# 	files        = os.listdir(new_path)
+	# 	# TODO MAKE CONDITIONS
+	# 	C = pd.read_hdf(os.path.join(new_path, 'C.h5'))
+	# 	A = pd.read_hdf(os.path.join(new_path, 'A.h5'))
+	# 	position = pd.read_hdf(os.path.join(new_path, 'position.h5'))
+	# 	position.columns = ['ry', 'rx', 'rz', 'x', 'y', 'z']
+	# 	A = A.values
+	# 	A = A.T.reshape(A.shape[1], dims[0], dims[1])		
 
-		return A, nts.TsdFrame(C), nts.TsdFrame(position)
+	# 	return A, nts.TsdFrame(C), nts.TsdFrame(position)
 
 	files = os.listdir(path)
 
@@ -56,19 +56,21 @@ def loadCalciumData(path, fs =30, dims = (304, 304), flip_ttl = False):
 		analogin = analogin.astype(np.int32)
 		timestep = np.arange(0, len(analogin))/20000
 
-		if flip_ttl:
-			peaks,_ = scipy.signal.find_peaks(np.diff(analogin[:,1]), height=30000)
-			peaks+=1
-			ttl_tracking = pd.Series(index = timestep[peaks], data = analogin[peaks,1])
-			peaks,_ = scipy.signal.find_peaks(np.abs(np.diff(analogin[:,0])), height=30000, distance = 500)
-			ttl_miniscope = pd.Series(index = timestep[peaks], data = analogin[peaks,0])
-
-		else:			
-			peaks,_ = scipy.signal.find_peaks(np.diff(analogin[:,0]), height=30000)		
-			peaks+=1
-			ttl_tracking = pd.Series(index = timestep[peaks], data = analogin[peaks,0])
+		# determining automatically which channel is tracking
+		peaks,_ = scipy.signal.find_peaks(np.diff(analogin[:,0]), height=30000)
+		peaks+=1
+		ttl0 = pd.Series(index = timestep[peaks], data = analogin[peaks,0])
+		peaks,_ = scipy.signal.find_peaks(np.diff(analogin[:,1]), height=30000)
+		peaks+=1
+		ttl1 = pd.Series(index = timestep[peaks], data = analogin[peaks,0])
+		if np.mean(np.diff(ttl0.index)) < np.mean(np.diff(ttl1.index)): # channel 0 is tracking
+			ttl_tracking = ttl0
 			peaks,_ = scipy.signal.find_peaks(np.abs(np.diff(analogin[:,1])), height=30000, distance = 500)
 			ttl_miniscope = pd.Series(index = timestep[peaks], data = analogin[peaks,1])
+		else:
+			ttl_tracking = ttl1
+			peaks,_ = scipy.signal.find_peaks(np.abs(np.diff(analogin[:,0])), height=30000, distance = 500)
+			ttl_miniscope = pd.Series(index = timestep[peaks], data = analogin[peaks,0])
 
 	else:
 		print("No analogin file in ", path)
@@ -86,7 +88,18 @@ def loadCalciumData(path, fs =30, dims = (304, 304), flip_ttl = False):
 		if 1 in position.columns:
 			position = position.drop(labels = 1, axis = 1)
 		position = position[~position.index.duplicated(keep='first')]
-		position.columns = ['ry', 'rx', 'rz', 'x', 'y', 'z']
+		names = []
+		for n in position.columns:
+			if n[0] == 'Rotation':
+				names.append('r'+n[1].lower())
+			elif n[0] == 'Position':
+				names.append(n[1].lower())
+			else:
+				print('Unknow csv file for position; Exiting')
+				sys.exit()
+
+		position.columns = names
+		position = position[['ry', 'rx', 'rz', 'x', 'y', 'z']]
 		position[['ry', 'rx', 'rz']] *= (np.pi/180)
 		position[['ry', 'rx', 'rz']] += 2*np.pi
 		position[['ry', 'rx', 'rz']] %= 2*np.pi

@@ -2,29 +2,32 @@
 %group = 'A0600';
 %number = 'A0642';
 
-group = 'A0600';
-number = 'A0634';
+group = 'A6500';
+number = 'A6510';
 
-results_directory = ['/mnt/DataRAID/MINISCOPE/' group '/' number '/CellReg'];
-dims = 225;
+results_directory = ['/mnt/DataRAID/MINISCOPE/' group '/' number '/minian/CellReg'];
+dims = 304;
 
-figures_directory = ['/mnt/DataRAID/MINISCOPE/' group '/' number '/CellReg/Figures'];
+figures_directory = ['/mnt/DataRAID/MINISCOPE/' group '/' number '/minian/CellReg/Figures'];
 figures_visibility = 'off'; % either 'on' or 'off' (in any case figures are saved)
 
-
-fid = fopen(['/home/guillaume/PSBImaging/python/datasets_' number '.txt']);
-tline = fgetl(fid);
+T = readtable(['/home/guillaume/PSBImaging/python/datasets_' number '.csv'], 'HeaderLines', 5);
+[filepath, name] = fileparts(results_directory);
 file_names = [];
-while ischar(tline)
-    if ~strcmp(tline(1), '#')
-        tmp = split(tline, ',');
-        names = split(tmp{1}, '/');
-        fbasename = names{end};
-        file_names{end+1} = [tmp{1} '/' fbasename '_A.csv'];            
-    end
-    tline = fgetl(fid);
-end
+[n,~] = size(T);
+for i=1:n
 
+    date = T{i,1}{1};
+    if ~(isempty(date))&& ~(date(1) == '#') 
+        tmp = strrep(date, '/', '');
+        fbasename = [number '-' tmp(3:end)];
+        path = [filepath '/' fbasename];
+        final_path = [path '/' fbasename '_A.csv'];
+        if isfile(final_path)
+            file_names{end+1} = final_path;
+        end
+    end
+end
 
 
 % Load csv files

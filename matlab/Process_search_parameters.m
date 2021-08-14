@@ -6,7 +6,7 @@ neuron = Sources2D();
 %nam = get_fullname('./data_1p.tif');          % this demo data is very small, here we just use it as an example
 %nam = neuron.select_data(nam);  %if nam is [], then select data interactively
 
-nams = {'/mnt/DataRAID/MINISCOPE/A6500/A6504/A6504-210412/A6504-210412.h5'}
+nams = {'/mnt/DataRAID/MINISCOPE/A1300/A1312/A1312-210630/A1312-210630.h5'}
 nams = neuron.select_multiple_files(nams);  
 
 
@@ -17,8 +17,8 @@ pars_envs = struct('memory_size_to_use', 8, ...   % GB, memory space you allow t
     'patch_dims', [16, 16]);  %GB, patch size
 
 % -------------------------      SPATIAL      -------------------------  %
-gSig = 6;           % pixel, gaussian width of a gaussian kernel for filtering the data. 0 means no filtering
-gSiz = 24;          % pixel, neuron diameter
+gSig = 2;           % pixel, gaussian width of a gaussian kernel for filtering the data. 0 means no filtering
+gSiz = 8;          % pixel, neuron diameter
 ssub = 1;           % spatial downsampling factor
 with_dendrites = false;   % with dendrites or not
 if with_dendrites
@@ -131,6 +131,7 @@ if choose_params
     % change parameters for optimized initialization
     [gSig, gSiz, ring_radius, min_corr, min_pnr] = neuron.set_parameters();
 end
+return
 
 [center, Cn, PNR] = neuron.initComponents_parallel(K, frame_range, save_initialization, use_parallel);
 neuron.compactSpatial();
