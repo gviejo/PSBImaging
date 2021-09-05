@@ -6,6 +6,9 @@ import pandas as pd
 import scipy.signal
 from numba import jit
 import h5py
+from functions import *
+
+
 '''
 Wrappers functions for miniscope data
 '''
@@ -142,7 +145,11 @@ def loadCalciumData(path, fs =30, dims = (304, 304)):
 
 	position.columns = ['ry', 'rx', 'rz', 'x', 'y', 'z']
 
-	return A, C, position
+	DFF 			= C.diff()
+	DFF 			= DFF.fillna(0).as_dataframe()
+	DFF[DFF<0]		= 0	
+
+	return A, C, DFF, position
 
 def loadCellReg(path, folder_name = 'CellReg', file_name = 'cellRegistered'):
 	folder_path = os.path.join(path, folder_name)
@@ -152,7 +159,7 @@ def loadCellReg(path, folder_name = 'CellReg', file_name = 'cellRegistered'):
 	assert len(cellreg_file)
 	
 	arrays = {}
-	f = h5py.File(os.path.join(folder_path, cellreg_file))
+	f = h5py.File(os.path.join(folder_path, cellreg_file), 'r')
 	for k, v in f.items():
 	    arrays[k] = v
 	cellreg = np.copy(np.array(arrays['cell_registered_struct']['cell_to_index_map']))
@@ -161,3 +168,37 @@ def loadCellReg(path, folder_name = 'CellReg', file_name = 'cellRegistered'):
 	cellreg = cellreg.T - 1 
 	scores = scores.flatten()
 	return cellreg.astype(np.int), scores
+
+def loadDatas(paths, dims):
+	SF = {}
+	TC = {}
+	PF = {}
+	allinfo = {}
+
+	for i, s in enumerate(paths):
+		print(s)
+		name 			= s.split('/')[-1]	
+		try:
+			A, C, DFF, position 	= loadCalciumData(s, dims = dims)
+			tuningcurve		= computeCalciumTuningCurves(DFF, position['ry'], norm=True)
+			tuningcurve 	= smoothAngularTuningCurves(tuningcurve)			
+
+			peaks 			= computeAngularPeaks(tuningcurve)
+			si 				= computeSpatialInfo(tuningcurve, position['ry'])		
+			stat 			= computeRayleighTest(tuningcurve)	
+			corr_tc			= computeCorrelationTC(DFF, position['ry'])
+			pf, extent		= computePlaceFields(DFF, position[['x', 'z']], 15)
+
+			SF[i] = A
+			TC[i] = tuningcurve
+			PF[i] = pf
+
+			allinfo[i] = pd.concat([peaks,si,stat,corr_tc], axis = 1)
+			
+		except:
+			print(i, " No data loaded for ", s)
+			continue
+
+
+
+	return SF, TC, PF, allinfo

@@ -8,6 +8,7 @@ from scipy import signal
 from itertools import combinations
 from pycircstat.descriptive import mean as circmean
 
+
 '''
 Utilities functions
 Feel free to add your own
@@ -170,7 +171,7 @@ def computePairwiseAngularDifference(alltc, sessions):
 	for i, j in diffsess.columns:
 		d = diffpairs[i] - diffpairs[j]
 		d = d.dropna()
-		diffsess.loc[d.index.values,(i,j)] = np.abs(np.arctan2(np.sin(d.values.astype(np.float32)), np.cos(d.values.astype(np.float32))))
+		diffsess.loc[d.index][(i,j)] = np.abs(np.arctan2(np.sin(d.values.astype(np.float32)), np.cos(d.values.astype(np.float32))))
 
 	return diffsess
 
@@ -220,5 +221,21 @@ def checkTuningCurvesCrossCorr(cc, alltc, session, i):
 	show(block = True)
 
 
-# for i in range(20):
-# 	checkTuningCurvesCrossCorr(cc, alltc, 0, i)
+def computeAngularPeaks(tuningcurve):
+	peaks 			= pd.DataFrame(index=tuningcurve.keys(),
+		data = np.array([circmean(tuningcurve[i].index.values, tuningcurve[i].values) for i in tuningcurve.keys()]),
+		columns = ['peaks']
+		)	
+	return peaks
+
+def computeCorrelationTC(DFF, angle):
+	tcurves2 = []
+	DFF2 = np.array_split(DFF,2)	
+	for j in range(2):		
+		tcurves_half	= computeCalciumTuningCurves(DFF2[j], angle, norm=True)
+		tcurves_half 	= smoothAngularTuningCurves(tcurves_half)	
+		tcurves2.append(tcurves_half)
+
+	diff = [np.corrcoef(tcurves2[0][j], tcurves2[1][j])[0,1] for j in DFF.columns]
+	diff = pd.DataFrame(data = diff, columns = ['halfcorr'])
+	return diff
