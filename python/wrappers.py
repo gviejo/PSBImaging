@@ -174,6 +174,7 @@ def loadDatas(paths, dims):
 	TC = {}
 	PF = {}
 	allinfo = {}
+	positions = {}
 
 	for i, s in enumerate(paths):
 		print(s)
@@ -192,13 +193,13 @@ def loadDatas(paths, dims):
 			SF[i] = A
 			TC[i] = tuningcurve
 			PF[i] = pf
-
+			positions[i] = position
 			allinfo[i] = pd.concat([peaks,si,stat,corr_tc], axis = 1)
-			
+
 		except:
 			print(i, " No data loaded for ", s)
 			continue
 
 
 
-	return SF, TC, PF, allinfo
+	return SF, TC, PF, allinfo, positions

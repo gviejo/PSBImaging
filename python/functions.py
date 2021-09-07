@@ -151,7 +151,7 @@ def computePlaceFields(C, position, nb_bins = 20):
 def computePairwiseAngularDifference(alltc, sessions):
 	"""
 	"""
-	diffpairs = pd.DataFrame(index = list(combinations(alltc.keys(),2)), columns = sessions)
+	diffpairs = pd.DataFrame(index = list(combinations(alltc.keys(),2)), columns = sessions, dtype = np.float32)
 
 	for i in diffpairs.columns:
 		tmp = []
@@ -166,12 +166,11 @@ def computePairwiseAngularDifference(alltc, sessions):
 		diff = cc.idxmax().abs()	
 		diffpairs.loc[diff.index.values,i] = diff.values
 
-	diffsess = pd.DataFrame(index = diffpairs.index.values, columns = list(combinations(sessions, 2)))
+	diffsess = pd.DataFrame(index = diffpairs.index.values, columns = list(combinations(sessions, 2)), dtype = np.float32)
 
 	for i, j in diffsess.columns:
 		d = diffpairs[i] - diffpairs[j]
-		d = d.dropna()
-		diffsess.loc[d.index][(i,j)] = np.abs(np.arctan2(np.sin(d.values.astype(np.float32)), np.cos(d.values.astype(np.float32))))
+		diffsess[(i,j)] = np.abs(np.arctan2(np.sin(d.values.astype(np.float32)), np.cos(d.values.astype(np.float32))))
 
 	return diffsess
 
