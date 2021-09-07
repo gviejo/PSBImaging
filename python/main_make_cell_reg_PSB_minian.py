@@ -17,7 +17,8 @@ from scipy.stats import norm
 from scipy.ndimage.filters import gaussian_filter
 
 #dims = (304,304)
-dims = (202, 216)
+#dims = (202, 216)
+dims = (178, 158) # A0634
 
 data_directory = '/mnt/DataRAID/MINISCOPE'
 

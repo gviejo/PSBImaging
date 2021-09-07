@@ -4,8 +4,8 @@ from shutil import copy2
 
 
 
-path = '/mnt/Hypernova/Sofia/A6500/A6510'
-target = '/media/guillaume/Elements/A6500/A6510'
+path = '/mnt/Hypernova/Sofia/A6500/A6509'
+target = '/mnt/DataRAID/MINISCOPE/A6500/A6509'
 lf = os.listdir(path)
 
 for l in lf:
