@@ -238,3 +238,75 @@ def computeCorrelationTC(DFF, angle):
 	diff = [np.corrcoef(tcurves2[0][j], tcurves2[1][j])[0,1] for j in DFF.columns]
 	diff = pd.DataFrame(data = diff, columns = ['halfcorr'])
 	return diff
+
+# Selecting neurons with good tuning curves
+from scipy import optimize
+def gaussian(x, amplitude, mean, stddev):
+    return amplitude * np.exp(-((x - mean) / 4 / stddev)**2)
+
+def findSinglePeakHDCell(alltc, sessions):
+	'''
+	FITTING NORMAL DISTRIBUTION TO TC
+	'''
+	std = pd.DataFrame(index = list(alltc.keys()), columns = sessions, dtype = np.float32)
+
+	for n in alltc.keys():
+		tmp = alltc[n]
+		ctc = centerTuningCurves(tmp.dropna(1))	
+		for k in ctc.columns:
+			try:
+				popt, _ = optimize.curve_fit(gaussian, ctc.index.values, ctc[k].values)
+			except RuntimeError:
+				popt = np.ones(3)*np.nan
+			std.loc[n,k] = popt[-1]
+	return std
+	
+###############################################################################################################
+# PLOT
+###############################################################################################################
+def figsize(scale):
+	fig_width_pt = 483.69687                         # Get this from LaTeX using \the\textwidth
+	inches_per_pt = 1.0/72.27                       # Convert pt to inch
+	golden_mean = (np.sqrt(5.0)-1.0)/2.0            # Aesthetic ratio (you could change this)
+	fig_width = fig_width_pt*inches_per_pt*scale    # width in inches
+	fig_height = fig_width*golden_mean*1.4          # height in inches
+	fig_size = [fig_width,fig_height]
+	return fig_size
+
+def simpleaxis(ax):
+	ax.spines['top'].set_visible(False)
+	ax.spines['right'].set_visible(False)
+	ax.get_xaxis().tick_bottom()
+	ax.get_yaxis().tick_left()
+	# ax.xaxis.set_tick_params(size=6)
+	# ax.yaxis.set_tick_params(size=6)
+
+def noaxis(ax):
+	ax.spines['top'].set_visible(False)
+	ax.spines['right'].set_visible(False)
+	ax.spines['left'].set_visible(False)
+	ax.spines['bottom'].set_visible(False)
+	ax.get_xaxis().tick_bottom()
+	ax.get_yaxis().tick_left()
+	ax.set_xticks([])
+	ax.set_yticks([])
+	# ax.xaxis.set_tick_params(size=6)
+	# ax.yaxis.set_tick_params(size=6)
+
+def getColoredFootprints(A, peaks, thr, nb_bins = 5):
+	from matplotlib.colors import hsv_to_rgb
+	dims = A.shape[1:]
+	H = peaks.values/(2*np.pi)
+	# binning angles
+	idx = np.digitize(H, np.linspace(0, 1, nb_bins+1))-1
+	H = idx/(nb_bins-1)
+	HSV = np.vstack((H, np.ones_like(H), np.ones_like(H))).T
+	RGB = hsv_to_rgb(HSV)
+
+	colorA = np.zeros((dims[0], dims[1], 3))
+	colorA *= np.nan
+
+	for i in range(len(A)):
+		colorA[A[i] > thr] = RGB[i]
+
+	return colorA	

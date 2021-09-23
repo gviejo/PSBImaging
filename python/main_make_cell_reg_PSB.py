@@ -18,13 +18,13 @@ from scipy.ndimage.filters import gaussian_filter
 from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
 
 
-#data_directory = '/mnt/DataRAID/MINISCOPE'
-data_directory = '/media/guillaume/Elements'
+data_directory = '/mnt/DataRAID/MINISCOPE'
+#data_directory = '/media/guillaume/Elements'
 
 ############################################################
 # ANIMAL INFO
 ############################################################
-fbasename = 'A0634'
+fbasename = 'A0642'
 info = pd.read_csv('/home/guillaume/PSBImaging/python/datasets_'+fbasename+'.csv', comment = '#', header = 5, delimiter = ',', index_col=False, usecols = [0,2,3,4]).dropna()
 paths = [os.path.join(data_directory, fbasename[0:3] + '00', fbasename, fbasename+'-'+info.loc[i,'Recording day'][2:].replace('/', '')) for i in info.index]
 sessions = [fbasename+'-'+info.loc[i,'Recording day'][2:].replace('/', '') for i in info.index]
@@ -34,30 +34,30 @@ info = info.set_index('sessions')
 
 if fbasename == 'A0634':
 	dims = (166, 136)
-
+elif fbasename == 'A0642':
+	dims = (201, 211)
 
 ############################################################
 # LOADING DATA
 ############################################################
-SF, TC, PF, allinfo, positions = loadDatas(paths, dims)
+SF, TC, PF, allinfo, positions, DFFS, Cs = loadDatas(paths, dims)
 
 
 cellreg, scores = loadCellReg(os.path.join(data_directory, fbasename[0:3] + '00', fbasename))
 
-# unifying cellreg and datas
-cellreg = cellreg[:,list(TC.keys())]
-scores = scores[list(TC.keys())]
-info = info.loc[sessions]
-sessions = np.array(sessions)[list(TC.keys())]
-
-
 
 ############################################################
-
+# SELECTING DATA
+############################################################
 n_sessions_detected = np.sum(cellreg!=-1, 1)
 
-tokeep = np.where(n_sessions_detected >= 25)[0]
+# Detected in most sessions
+tokeep = np.where(n_sessions_detected >= 5)[0]
 
+# Good Cell reg scores 
+tokeep = tokeep[scores[tokeep]>0.5]
+
+# Selecting neurons with stable tuning curves
 allst = {}
 for i in tokeep:
 	allst[i] = pd.Series(index = np.arange(cellreg.shape[1]), dtype = np.float32)
@@ -65,11 +65,7 @@ for i in tokeep:
 		allst[i][j] = allinfo[list(allinfo.keys())[j]]['halfcorr'].loc[cellreg[i,j]]
 
 allst = pd.concat(allst, 1).T
-
-
-# Selecting neurons with stable tuning curves
 allst[allst<0.4] = np.nan
-
 tokeep = allst[allst.notna().any(1)].index.values
 
 
@@ -77,14 +73,14 @@ tokeep = allst[allst.notna().any(1)].index.values
 
 alltc = {}
 allpf = {}
+allpk = pd.DataFrame(index = tokeep, columns = sessions, dtype = np.float32)
 for i in tokeep:
 	alltc[i] = pd.DataFrame(columns = sessions)
-	allpf[i] = np.zeros((len(sessions), PF[0].shape[1], PF[0].shape[2],))
+	allpf[i] = np.zeros((len(sessions), PF[0].shape[1], PF[0].shape[2],))	
 	for j in np.where(cellreg[i]!=-1)[0]:
-
 		alltc[i][sessions[j]] = TC[list(TC.keys())[j]][cellreg[i,j]]
 		allpf[i][j] = PF[list(TC.keys())[j]][cellreg[i,j]]
-
+		allpk.loc[i,sessions[j]] = allinfo[j].loc[cellreg[i,j],'peaks']
 
 
 ####################################################################################
@@ -116,41 +112,89 @@ rnddiffsess = pd.concat(rnddiffsess)
 
 
 
-
 #####################################################################################
-# PLOT EXAMPLE TUNING CURVES
+# PLOT SUMMARY PLOT
 #####################################################################################
-index = np.array(list(alltc.keys()))[0:5]
-
 envs = info.loc[sessions].groupby('Rig').groups
 
 order = ['Circular', 'Square', '8-arm maze', 'Open field']
 
 sessions = list(sessions)
 
-figure()
-gs = GridSpec(3, len(order))
-# plot position of each exploration
+ref = sessions[np.sum(cellreg[tokeep] == -1, 0).argmin()]# reference sessions
+
+norder = allpk[ref].dropna().sort_values().index.values
+
+figure(figsize = (15, 10))
+gs = GridSpec(len(order), 1, top = 0.95, bottom = 0.05, left = 0.03, right = 0.96)
+
 for i, o in enumerate(order):
-	gs2 = GridSpecFromSubplotSpec(1, len(envs[o]), gs[0,i])
+	n_envs = len(envs[o])
+	gs2 = GridSpecFromSubplotSpec(2,n_envs, gs[i,:])
+
 	for j, s in enumerate(envs[o]):
-		ax = subplot(gs2[0,j])
+		gs3 = GridSpecFromSubplotSpec(1,2,gs2[0,j])
+		# plot position of each exploration		
+		ax = subplot(gs3[0,0], aspect = 'equal')
+		if s!=ref: noaxis(ax)
 		plot(positions[sessions.index(s)]['x'], positions[sessions.index(s)]['z'])
 		xticks([])
 		yticks([])
 
+		# plot spatial footprints colored by preferessed direction	
+		ax = subplot(gs3[0,1], aspect = 'equal')
+		A = SF[sessions.index(s)]
+		cA = getColoredFootprints(A, allinfo[sessions.index(s)]['peaks'], 4)
+		imshow(cA, cmap = 'jet')
+		xticks([])
+		yticks([])
 
-for i, n in enumerate(index):
-	ax = subplot(int(np.ceil(np.sqrt(len(index))))-1,int(np.ceil(np.sqrt(len(index)))),i+1)
-	gs = GridSpecFromSubplotSpec(1,len(rigs),ax)
-	tmp = alltc[n].dropna(1, 'all')
-	grp = info.loc[tmp.columns].groupby('Rig').groups
-	for j, m in enumerate(rigs):
-		if m in grp.keys():
-			subplot(gs[0,j], projection = 'polar')
-			plot(alltc[n][grp[m]], color = cm.rainbow(np.linspace(0,1,len(rigs)))[j])
-			xticks([])
-			yticks([])
+	# plot matrix of tc
+	for j, s in enumerate(envs[o][0:n_envs]):		
+		tc = np.array([alltc[n][s].values for k, n in enumerate(norder) if ~np.isnan(alltc[n][s].values[0])])
+		#tc = (tc.T/tc.max(1)).T
+		tc2 = gaussian_filter(tc, 2)		
+		ax = subplot(gs2[1,j], aspect = 'equal')
+		#noaxis(ax)
+		imshow(tc2, cmap = 'jet')
+		xticks([])
+		
+savefig('../figures/figure_psb_'+fbasename+'_1.pdf', format = 'pdf', dpi = 200, bbox_inches = 'tight')
+
+
+
+####################################################################################
+# BLURRED SPATIAL FOOTPRINTS
+####################################################################################
+figure()
+gs = GridSpec(len(order), 1, top = 0.95, bottom = 0.05, left = 0.03, right = 0.96)
+
+for i, o in enumerate(order):
+	n_envs = len(envs[o])
+	gs2 = GridSpecFromSubplotSpec(1,n_envs, gs[i,:])
+
+	for j, s in enumerate(envs[o]):
+		# plot spatial footprints colored by preferessed direction	
+		ax = subplot(gs2[0,j], aspect = 'equal')
+		A = SF[sessions.index(s)]		
+		dims = A.shape[1:]
+		peaks = allinfo[sessions.index(s)]['peaks']
+		alpha = np.zeros_like(A)*np.nan
+		thr = 2
+		for i in range(len(A)):
+			alpha[i][A[i] > 1] = peaks[i]
+
+		meanalpha = np.arctan2(np.nanmean(np.sin(alpha), 0), np.nanmean(np.cos(alpha), 0))
+		meanalpha[meanalpha<0] += 2*np.pi
+
+		H = meanalpha/(2*np.pi)
+		HSV = np.dstack((H, np.ones_like(H), np.ones_like(H)))
+		colorA = hsv_to_rgb(HSV)
+
+		imshow(colorA)
+		xticks([])
+		yticks([])
+
 
 
 ####################################################################################

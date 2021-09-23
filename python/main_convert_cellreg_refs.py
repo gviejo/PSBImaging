@@ -13,12 +13,12 @@ from matplotlib.colors import hsv_to_rgb
 from matplotlib.gridspec import GridSpec
 
 
-#data_directory = '/mnt/DataRAID/MINISCOPE'
-data_directory = '/media/guillaume/Elements'
+data_directory = '/mnt/DataRAID/MINISCOPE'
+#data_directory = '/media/guillaume/Elements'
 
 ############################################################
 
-fbasename = 'A0634'
+fbasename = 'A6509'
 info = pd.read_csv('/home/guillaume/PSBImaging/python/datasets_'+fbasename+'.csv', comment = '#', header = 5, delimiter = ',', index_col=False, usecols = [0,2,3,4]).dropna()
 paths = [os.path.join(data_directory, fbasename[0:3] + '00', fbasename, fbasename+'-'+info.loc[i,'Recording day'][2:].replace('/', '')) for i in info.index]
 sessions = [fbasename+'-'+info.loc[i,'Recording day'][2:].replace('/', '') for i in info.index]

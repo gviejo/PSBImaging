@@ -20,18 +20,18 @@ def loadCalciumData(path, fs =30, dims = (304, 304)):
 	if not os.path.exists(path):
 		print("The path "+path+" doesn't exist; Exiting ...")
 		sys.exit()    
-	# new_path = os.path.join(path, 'Analysis/')
-	# if os.path.exists(new_path):		
-	# 	files        = os.listdir(new_path)
-	# 	# TODO MAKE CONDITIONS
-	# 	C = pd.read_hdf(os.path.join(new_path, 'C.h5'))
-	# 	A = pd.read_hdf(os.path.join(new_path, 'A.h5'))
-	# 	position = pd.read_hdf(os.path.join(new_path, 'position.h5'))
-	# 	position.columns = ['ry', 'rx', 'rz', 'x', 'y', 'z']
-	# 	A = A.values
-	# 	A = A.T.reshape(A.shape[1], dims[0], dims[1])		
+	new_path = os.path.join(path, 'Analysis/')
+	if os.path.exists(new_path):
+		files = os.listdir(new_path)
+		if len(files) == 4: # BAD
+			
+			C = pd.read_hdf(os.path.join(new_path, 'C.h5'))
+			DFF = pd.read_hdf(os.path.join(new_path, 'DFF.h5'))
+			position = pd.read_hdf(os.path.join(new_path, 'position.h5'))
+			A = np.load(os.path.join(new_path, 'A.npy'))
 
-	# 	return A, nts.TsdFrame(C), nts.TsdFrame(position)
+			return A, C, DFF, position
+
 
 	files = os.listdir(path)
 
@@ -132,14 +132,6 @@ def loadCalciumData(path, fs =30, dims = (304, 304)):
 	C = C.restrict(ep)
 	position = position.restrict(ep)
 
-	# saving
-	# Creating /Analysis/ Folder here if not already present
-	# if not os.path.exists(new_path): os.makedirs(new_path)
-
-	# C.as_dataframe().to_hdf(os.path.join(new_path, 'C.h5'), 'C', format='table')
-	# position.as_dataframe().to_hdf(os.path.join(new_path, 'position.h5'), 'p', format='table')
-	# A.to_hdf(os.path.join(new_path, 'A.h5'), 'A', format='table')
-
 	A = A.values
 	A = A.T.reshape(A.shape[1], dims[0], dims[1])
 
@@ -148,6 +140,14 @@ def loadCalciumData(path, fs =30, dims = (304, 304)):
 	DFF 			= C.diff()
 	DFF 			= DFF.fillna(0).as_dataframe()
 	DFF[DFF<0]		= 0	
+
+	# saving
+	# Creating /Analysis/ Folder here if not already present
+	if not os.path.exists(new_path): os.makedirs(new_path)
+	C.as_dataframe().to_hdf(os.path.join(new_path, 'C.h5'), 'C', format='table')
+	DFF.to_hdf(os.path.join(new_path, 'DFF.h5'), 'DFF', format = 'table')
+	position.as_dataframe().to_hdf(os.path.join(new_path, 'position.h5'), 'p', format='table')	
+	np.save(os.path.join(new_path, 'A.npy'), A)
 
 	return A, C, DFF, position
 
@@ -175,31 +175,122 @@ def loadDatas(paths, dims):
 	PF = {}
 	allinfo = {}
 	positions = {}
+	DFFS = {}
+	Cs = {}
 
 	for i, s in enumerate(paths):
 		print(s)
 		name 			= s.split('/')[-1]	
-		try:
-			A, C, DFF, position 	= loadCalciumData(s, dims = dims)
-			tuningcurve		= computeCalciumTuningCurves(DFF, position['ry'], norm=True)
-			tuningcurve 	= smoothAngularTuningCurves(tuningcurve)			
+		
+		A, C, DFF, position 	= loadCalciumData(s, dims = dims)
+		tuningcurve		= computeCalciumTuningCurves(DFF, position['ry'], norm=True)		
+		tuningcurve 	= smoothAngularTuningCurves(tuningcurve)			
 
-			peaks 			= computeAngularPeaks(tuningcurve)
-			si 				= computeSpatialInfo(tuningcurve, position['ry'])		
-			stat 			= computeRayleighTest(tuningcurve)	
-			corr_tc			= computeCorrelationTC(DFF, position['ry'])
-			pf, extent		= computePlaceFields(DFF, position[['x', 'z']], 15)
+		peaks 			= computeAngularPeaks(tuningcurve)
+		si 				= computeSpatialInfo(tuningcurve, position['ry'])		
+		stat 			= computeRayleighTest(tuningcurve)	
+		corr_tc			= computeCorrelationTC(DFF, position['ry'])
+		pf, extent		= computePlaceFields(DFF, position[['x', 'z']], 15)
 
-			SF[i] = A
-			TC[i] = tuningcurve
-			PF[i] = pf
-			positions[i] = position
-			allinfo[i] = pd.concat([peaks,si,stat,corr_tc], axis = 1)
+		SF[i] = A
+		TC[i] = tuningcurve
+		PF[i] = pf
+		positions[i] = position
+		allinfo[i] = pd.concat([peaks,si,stat,corr_tc], axis = 1)
+		DFFS[i] = DFF
+		Cs[i] = C
 
-		except:
-			print(i, " No data loaded for ", s)
-			continue
+	return SF, TC, PF, allinfo, positions, DFFS, Cs
 
 
+def loadLFP(path, n_channels=90, channel=64, frequency=1250.0, precision='int16'):
+	import neuroseries as nts	
+	f = open(path, 'rb')
+	startoffile = f.seek(0, 0)
+	endoffile = f.seek(0, 2)
+	bytes_size = 2		
+	n_samples = int((endoffile-startoffile)/n_channels/bytes_size)
+	duration = n_samples/frequency
+	interval = 1/frequency
+	f.close()
+	fp = np.memmap(path, np.int16, 'r', shape = (n_samples, n_channels))		
+	timestep = np.arange(0, n_samples)/frequency
 
-	return SF, TC, PF, allinfo, positions
+	if type(channel) is not list:
+		timestep = np.arange(0, n_samples)/frequency
+		return nts.Tsd(timestep, fp[:,channel], time_units = 's')
+	elif type(channel) is list:
+		timestep = np.arange(0, n_samples)/frequency
+		return nts.TsdFrame(timestep, fp[:,channel], time_units = 's')
+
+def loadAuxiliary(path, n_probe = 1, fs = 20000):
+	"""
+	Extract the acceleration from the auxiliary.dat for each epochs
+	Downsampled at 100 Hz
+	Args:
+		path: string
+		epochs_ids: list        
+	Return: 
+		TsdArray
+	""" 	
+	if not os.path.exists(path):
+		print("The path "+path+" doesn't exist; Exiting ...")
+		sys.exit()
+	if 'Acceleration.h5' in os.listdir(os.path.join(path, 'Analysis')):
+		accel_file = os.path.join(path, 'Analysis', 'Acceleration.h5')
+		store = pd.HDFStore(accel_file, 'r')
+		accel = store['acceleration'] 
+		store.close()
+		accel = nts.TsdFrame(t = accel.index.values*1e6, d = accel.values) 
+		return accel
+	else:
+		aux_files = np.sort([f for f in os.listdir(path) if 'auxiliary' in f])
+		if len(aux_files)==0:
+			print("Could not find "+f+'_auxiliary.dat; Exiting ...')
+			sys.exit()
+
+		accel = []
+		sample_size = []
+		for i, f in enumerate(aux_files):
+			new_path 	= os.path.join(path, f)
+			f 			= open(new_path, 'rb')
+			startoffile = f.seek(0, 0)
+			endoffile 	= f.seek(0, 2)
+			bytes_size 	= 2
+			n_samples 	= int((endoffile-startoffile)/(3*n_probe)/bytes_size)
+			duration 	= n_samples/fs		
+			f.close()
+			tmp 		= np.fromfile(open(new_path, 'rb'), np.uint16).reshape(n_samples,3*n_probe)
+			accel.append(tmp)
+			sample_size.append(n_samples)
+			del tmp
+
+		accel = np.concatenate(accel)	
+		factor = 37.4e-6
+		# timestep = np.arange(0, len(accel))/fs
+		# accel = pd.DataFrame(index = timestep, data= accel*37.4e-6)
+		tmp  = []
+		for i in range(accel.shape[1]):
+			tmp.append(scipy.signal.resample_poly(accel[:,i]*factor, 1, 100))
+		tmp = np.vstack(tmp).T
+		timestep = np.arange(0, len(tmp))/(fs/100)
+		tmp = pd.DataFrame(index = timestep, data = tmp)
+		accel_file = os.path.join(path, 'Analysis', 'Acceleration.h5')
+		store = pd.HDFStore(accel_file, 'w')
+		store['acceleration'] = tmp
+		store.close()
+		accel = nts.TsdFrame(t = tmp.index.values*1e6, d = tmp.values) 
+		return accel		
+
+def loadInfos(data_directory, sessions_dir, animals):
+	infos = {}
+	for fbasename in animals:		
+		info = pd.read_csv(sessions_dir + 'datasets_'+fbasename+'.csv', comment = '#', header = 5, delimiter = ',', index_col=False, usecols = [0,2,3,4]).dropna()
+		paths = [os.path.join(data_directory, fbasename[0:3] + '00', fbasename, fbasename+'-'+info.loc[i,'Recording day'][2:].replace('/', '')) for i in info.index]
+		sessions = [fbasename+'-'+info.loc[i,'Recording day'][2:].replace('/', '') for i in info.index]
+		info['paths'] = paths
+		info['sessions'] = sessions
+		info = info.set_index('sessions')
+		infos[fbasename] = info
+
+	return infos

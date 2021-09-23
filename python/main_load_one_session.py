@@ -14,19 +14,19 @@ from wrappers import *
 from functions import *
 from scipy.ndimage.filters import gaussian_filter
 
-path = '/mnt/DataRAID/MINISCOPE/A6500/A6510/A6510-210517'
+path = '/mnt/DataRAID/MINISCOPE/A6500/A6510/A6510-210618'
 
 name = path.split('/')[-1]
 
-dims = (225,225)
+dims = (192,251)
 			
-A, C, position 	= loadCalciumData(path, dims = dims)
+A, C, DFF, position 	= loadCalciumData(path, dims = dims)
 
-DFF 			= C.diff()
-DFF 			= DFF.fillna(0).as_dataframe()
-DFF[DFF<0]		= 0
+# DFF 			= C.diff()
+# DFF 			= DFF.fillna(0).as_dataframe()
+# DFF[DFF<0]		= 0
 
-tuningcurve		= computeCalciumTuningCurves(DFF, position['ry'], norm=True)
+tuningcurve		= computeCalciumTuningCurves(C, position['ry'], norm=True)
 tuningcurve 	= smoothAngularTuningCurves(tuningcurve)			
 
 
@@ -40,6 +40,15 @@ for i, n in enumerate(tuningcurve.columns):
 	yticks([])
 
 
+Aall = np.zeros(A.shape[1:])
+for i in range(len(A)):
+	tmp = A[i]
+	tmp = tmp / tmp.max()
+	idx = tmp>0.6
+	Aall[idx] = Aall[idx] + tmp[idx]
+		
+imshow(Aall, cmap = 'jet')
+show()
 
 
 
