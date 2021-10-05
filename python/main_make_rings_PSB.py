@@ -67,7 +67,7 @@ for i in tokeep:
 		allst[i][j] = allinfo[list(allinfo.keys())[j]]['halfcorr'].loc[cellreg[i,j]]
 
 allst = pd.concat(allst, 1).T
-allst[allst<0.6] = np.nan
+allst[allst<0.8] = np.nan
 tokeep = allst[allst.notna().any(1)].index.values
 
 # Selecting HD cells
@@ -85,74 +85,122 @@ for i in tokeep:
 std = findSinglePeakHDCell(alltc, sessions)
 std[std>0.7] = np.nan
 
+tolook = [16,17]
 
-s = 5
+tokeep = std.iloc[:,tolook].dropna().index.values
 
-tokeep = std.iloc[:,s].dropna().index.values
+data5 = []
+angles5 = []
+idx5 = []
+idx_sessions = cellreg[tokeep][:,tolook]
 
-idx = np.sort(cellreg[:,s][tokeep][cellreg[:,s][tokeep] > -1]) # neurons for session
-idx = allinfo[s].loc[idx, 'peaks'].sort_values().index
-# tc = TC[s][idx].copy()
-# tc = centerTuningCurves(tc)
-#nidx = idx[np.argsort(std.iloc[:,s].dropna().values)]
+for k, s in enumerate(tolook):
+	idx = idx_sessions[:,k]
+	#idx = np.sort(cellreg[:,s][tokeep][cellreg[:,s][tokeep] > -1]) # neurons for session
+	#idx = allinfo[s].loc[idx, 'peaks'].sort_values().index
+	# tc = TC[s][idx].copy()
+	# tc = centerTuningCurves(tc)
+	#nidx = idx[np.argsort(std.iloc[:,s].dropna().values)]
 
-decim = 1
-#nt = np.min([DFFS[s].shape[0] for i in tolook]) 
-nt = DFFS[s].shape[0]
-ntm = int(np.ceil(nt/decim))
-# MAKING THE DATA
-#data = np.zeros((ntm,len(tokeep),len(sessions2)))
-data = np.zeros((ntm,len(idx)))
-#angles = np.zeros((ntm,len(sessions2)))
-angles = np.zeros(ntm)
-#for i in tolook:
-tmp = np.unwrap(positions[s]['ry'].values[0:nt])
-tmp2 = scipy.signal.decimate(tmp, decim)
-tmp2 = tmp2%(2*np.pi)
-angles = tmp2
-for j, n in enumerate(idx):
-	tmp = DFFS[s][n].values
-	# if cellreg[n,i] != -1:
-		# tmp = DFFS[i][cellreg[n,i]].values[0:nt]
-	#tmp = np.sqrt(tmp)
-	# tmp = tmp - tmp.mean()
-	# tmp = tmp / tmp.std()
-	tmp = scipy.ndimage.gaussian_filter1d(tmp, 10)
-	#data[:,j] = scipy.signal.decimate(tmp, decim)
-	data[:,j] = tmp
-			
-# pick most active bins
-idx2 = data.sum(1) > np.percentile(data.sum(1), 90)
-#idx2 = np.sum(data==0,1) < data.shape[1]*0.8
-data = data[idx2]
-angles = angles[idx2]
+	nt = DFFS[s].shape[0]
 
-H = angles/(2*np.pi)
+	data = np.zeros((nt,len(idx)))
+
+	angles = downsampleAngleFromC(DFFS[s].index.values, positions[s]['ry'])
+	angles = angles.values
+
+	for j, n in enumerate(idx):
+		tmp = DFFS[s][n].values
+		# if cellreg[n,i] != -1:
+			# tmp = DFFS[i][cellreg[n,i]].values[0:nt]
+		#tmp = np.sqrt(tmp)
+		# tmp = tmp - tmp.mean()
+		# tmp = tmp / tmp.std()
+		#tmp = scipy.ndimage.gaussian_filter1d(tmp, 1)
+		#data[:,j] = scipy.signal.decimate(tmp, decim)
+		data[:,j] = tmp
+
+	# data[data<data.max(0)/3] = 0.0
+	# data[data>0.0] = 1.0
+
+	# filtering
+	data2 = scipy.ndimage.gaussian_filter1d(data, sigma = 30, axis = 0)
+
+	# downsamplign
+	idx3 = np.arange(0, data2.shape[0], 10)
+	data3 = data2[idx3]
+	angles3 = angles[idx3]
+
+	# pick most active bins
+	idx4 = data3.sum(1) > np.percentile(data3.sum(1), 60)
+	#idx2 = np.sum(data==0,1) < data.shape[1]*0.8
+	#idx2 = data.sum(1) > 0.0
+	data4 = data3[idx4]
+	angles4 = angles3[idx4]
+
+	data4 = data4 - data4.mean(0)
+	data4 = data4 / data4.std(0)
+
+	data5.append(data4)
+	angles5.append(angles4)
+	idx5.append(np.ones(len(data4))*k)
+
+data5 = np.vstack(data5)
+angles5 = np.hstack(angles5)
+idx5 = np.hstack(idx5)
+
+H = angles5/(2*np.pi)
 HSV = np.vstack((H, np.ones_like(H), np.ones_like(H))).T
 RGB = hsv_to_rgb(HSV)
 
 
-imap = Isomap(n_neighbors = 100, n_components = 2).fit_transform(data)
+imap = Isomap(n_neighbors = 100, n_components = 3).fit_transform(data5)
 
-#imap = UMAP(n_neighbors = 100, min_dist = 1).fit_transform(data)
+imap = UMAP(n_neighbors = 100, min_dist = 1, low_memory=True).fit_transform(data4)
 
-imap = PCA(n_components = 2).fit_transform(data)
+#imap = PCA(n_components = 2).fit_transform(data)
 
 figure()
 scatter(imap[:,0], imap[:,1], c= RGB, marker = '.', alpha = 0.5, linewidth = 0, s = 100)
 show()
 
+# sys.exit()
+
+from mpl_toolkits import mplot3d
+
+fig = figure()
+ax = axes(projection='3d')
+markers = ['o', '^']
+colors = ['blue', 'green']
+for i in range(2):	
+#	ax.scatter(imap[idx5==i,0], imap[idx5==i,1], imap[idx5==i,2], color = RGB[idx5==i], marker = markers[i])
+	ax.scatter(imap[idx5==i,0], imap[idx5==i,1], imap[idx5==i,2], color = colors[i])
+show()
+
+
+
 figure()
-imshow(data, aspect = 'auto', cmap = 'jet', extent = (0, 2*np.pi, 0, len(data)))
-plot(angles, np.arange(0, len(angles)))
+subplot(111)
+for i, n in enumerate(idx):
+	#plot(allinfo[s].loc[n,'peaks'] + data[:,i]*0.5)
+	plot(allinfo[s].loc[n,'peaks'] + data2[:,i]*2)
+plot(angles)
 
-
-
+show()
 
 figure()
-for i, n in enumerate(tokeep):
-	subplot(5,10,i+1)#,projection='polar')
-	plot(alltc[n].iloc[:,s])
-	title(std.iloc[:,s].loc[n])
-	xticks([])
-	yticks([])
+subplot(111)
+for i, n in enumerate(idx):
+	#plot(allinfo[s].loc[n,'peaks'] + data[:,i]*0.5)
+	plot(allinfo[s].loc[n,'peaks'] + data3[:,i]*2)
+plot(angles3)
+
+show()
+
+# figure()
+# for i, n in enumerate(tokeep):
+# 	subplot(5,10,i+1)#,projection='polar')
+# 	plot(alltc[n].iloc[:,s])
+# 	title(std.iloc[:,s].loc[n])
+# 	xticks([])
+# 	yticks([])

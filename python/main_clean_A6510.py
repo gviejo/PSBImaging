@@ -23,7 +23,7 @@ data_directory = '/mnt/DataRAID/MINISCOPE'
 ############################################################
 # ANIMAL INFO
 ############################################################
-fbasename = 'A6510'
+fbasename = 'A6512'
 info = pd.read_csv('/home/guillaume/PSBImaging/python/datasets_'+fbasename+'.csv', comment = '#', header = 5, delimiter = ',', index_col=False, usecols = [0,2,3,4]).dropna()
 paths = [os.path.join(data_directory, fbasename[0:3] + '00', fbasename, fbasename+'-'+info.loc[i,'Recording day'][2:].replace('/', '')) for i in info.index]
 sessions = [fbasename+'-'+info.loc[i,'Recording day'][2:].replace('/', '') for i in info.index]
@@ -35,11 +35,14 @@ if fbasename == 'A6509':
 	dims = (202,192)
 elif fbasename == 'A6510':
 	dims = (192,251)
+elif fbasename == 'A6512':
+	dims = (182,285)
 
 ############################################################
 # LOADING DATA
 ############################################################
 SF, TC, PF, allinfo, positions, DFFS, Cs = loadDatas(paths, dims)
+#sys.exit()
 
 print('\n')
 
@@ -62,4 +65,4 @@ for i in SF.keys():
 		np.savetxt(p+'_good_neurons.txt', np.vstack(good_neurons),fmt='%i')
 
 
-#np.savetxt('/mnt/DataRAID/MINISCOPE/A6500/A6510/bad_sessions.txt', bad_sessions, fmt='%s')
+np.savetxt('/mnt/DataRAID/MINISCOPE/A6500/A6512/bad_sessions.txt', bad_sessions, fmt='%s')

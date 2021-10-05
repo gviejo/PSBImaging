@@ -122,7 +122,7 @@ for a in datas.keys():
 #######################################################################
 # FIGURES
 #######################################################################
-figure()
+figure(figsize = (17, 10))
 gs = GridSpec(2,2)
 
 grps = struct.groupby('struct').groups
@@ -156,12 +156,12 @@ for i, g in enumerate(grps.keys()):
 
 		errorbar(range(1,len(m)+1),m,v, marker = 'o', linestyle = 'None')
 
-		xticks(range(1,len(tmp)+1), tmp.keys())		
+		xticks(range(1,len(tmp)+1), tmp.keys(), rotation = 20)		
+
+savefig('../figures/figure_envs_correlation_all.pdf', dpi = 200, bbox_inches = 'tight')
 
 
-
-
-figure()
+figure(figsize = (14, 6))
 subplot(121)
 for i, a in enumerate(stability.keys()):	
 	tmp = stability[a].values.flatten()	
@@ -170,10 +170,21 @@ for i, a in enumerate(stability.keys()):
 legend()
 xlabel("Stability")
 subplot(122)
+order = ['Circular', 'Square', '8-arm maze', 'Open field']
+symbols = ['*-', '^-', 'o-', 's-']
+colors = ['red', 'blue', 'orange', 'magenta']
 for i, a in enumerate(stability.keys()):
-	plot(np.nanmean(stability[a], 0), label = a)
-legend()
+	grps = infos[a].groupby('Rig').groups
+	tmp = np.nanmean(stability[a], 0)
+	plot(tmp)
+	# count = 0
+	# for j, e in enumerate(order):
+	# 	plot(np.arange(count, count+len(grps[e])), tmp[count:count+len(grps[e])], symbols[j], color= colors[j])		
+	# 	count += len(grps[e])
+
+#legend()
 xlabel("Session")
 ylabel("Stability")
 
-show()
+savefig('../figures/figure_stability_all.pdf', dpi = 200, bbox_inches = 'tight')
+

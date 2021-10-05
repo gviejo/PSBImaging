@@ -112,9 +112,28 @@ def loadCalciumData(path, fs =30, dims = (304, 304)):
 
 	position = position.fillna(0)
 
-	position.index = nts.Ts(t = ttl_tracking.index[0:len(position)].values, time_units = 's').index
-	position = nts.TsdFrame(position)	
-	# bad
+	# REALING POSITION
+	# NEED TO CHECK FOR MISSING TTLS
+	# ASSUMING TTL_tracking should be between 80 and 140 Hz according to motive
+	if np.max(np.diff(ttl_tracking.index.values)) < 1/80 and np.min(np.diff(ttl_tracking.index.values)) > 1/140:
+		position.index = nts.Ts(t = ttl_tracking.index[0:len(position)].values, time_units = 's').index
+		position = nts.TsdFrame(position)	
+		# bad
+	else: # PRoblem with the ttls
+		print("Problem with the tracking in ", path)
+		tmp = np.diff(ttl_tracking.index)
+		# FILLING MISSING TTLS ONLY IF ONE MISSING TTLS		
+		if np.max(tmp) < (1/100) * 3:
+			tmp2 = np.array([ttl_tracking.index[i]+tmp[i]/2 for i in range(len(tmp)) if tmp[i] > 1/80])
+			ttl_tracking = ttl_tracking.append(pd.Series(index=tmp2,data=np.nan)).sort_index()
+			position.index = nts.Ts(t = ttl_tracking.index[0:len(position)].values, time_units = 's').index
+			position = nts.TsdFrame(position)	
+
+		else:
+			print("Big problem with the tracking in ", path)
+			sys.exit()
+
+
 
 
 	# loading spatial footprints
@@ -180,7 +199,7 @@ def loadDatas(paths, dims):
 
 	for i, s in enumerate(paths):
 		print(s)
-		name 			= s.split('/')[-1]	
+		name 			= s.split('/')[-1]
 		
 		A, C, DFF, position 	= loadCalciumData(s, dims = dims)
 		tuningcurve		= computeCalciumTuningCurves(DFF, position['ry'], norm=True)		

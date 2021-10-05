@@ -261,6 +261,29 @@ def findSinglePeakHDCell(alltc, sessions):
 			std.loc[n,k] = popt[-1]
 	return std
 	
+def downsampleAngleFromC(time_frame, angle):
+	'''
+		Downsampling the angle to the time bins based on C time index
+	'''	
+	time_bins		= np.zeros(len(time_frame)+1)
+	time_bins[1:-1] = time_frame[1:] - np.diff(time_frame)/2
+	time_bins[0] = time_frame[0] - np.mean(np.diff(time_frame))
+	time_bins[-1] = time_frame[-1] + np.mean(np.diff(time_frame))
+
+	tmp 			= pd.Series(index = angle.index.values, data = np.unwrap(angle.values))	
+	tmp2 			= tmp.rolling(window=50,win_type='gaussian',center=True,min_periods=1).mean(std=10.0)
+	index 			= np.digitize(tmp2.index.values, time_bins)
+	tmp3 			= tmp2.groupby(index).mean()	
+	if 0 in tmp3.index: tmp3 			= tmp3.drop(0)
+	if len(time_bins) in tmp3.index: tmp3			= tmp3.drop(len(time_bins))
+
+	tmp3.index 		= time_bins[0:-1] + np.diff(time_bins)/2
+	newangle 		= pd.Series(index = tmp3.index.values, data = tmp3.values%(2*np.pi))
+
+	return newangle
+
+
+
 ###############################################################################################################
 # PLOT
 ###############################################################################################################
