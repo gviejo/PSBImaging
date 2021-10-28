@@ -23,11 +23,14 @@ from umap import UMAP
 
 data_directory = '/mnt/DataRAID/MINISCOPE'
 #data_directory = '/media/guillaume/Elements'
-struct = pd.DataFrame(index = ['A0634', 'A0642', 'A6509', 'A6510'], 
+struct = pd.DataFrame(index = ['A0634', 'A0642', 'A0643', 'A6509', 'A6510', 'A6512'], 
 	data = [['psb', (166, 136)],
 			['psb', (201, 211)],
+			['psb', (186, 186)],
 			['rsp', (202, 192)],
-			['rsp', (192, 251)]],			
+			['rsp', (192, 251)],
+			['rsp', (182, 285)]
+			],
 	columns = ['struct', 'dims'])
 
 
@@ -102,7 +105,7 @@ for a in allreg.keys():
 
 
 figure()
-gs = GridSpec(2,2)
+gs = GridSpec(2,3)
 
 grps = struct.groupby('struct').groups
 
@@ -112,7 +115,7 @@ for i, g in enumerate(grps.keys()):
 		color = iter(cm.rainbow(np.linspace(0, 1, len(order))))	
 		classe = clus[a].index.values
 		imap = clus[a].values
-		size = np.arange(0, np.sum(classe==k))*10
+		#size = np.arange(0, np.sum(classe==k))*10
 		for k in range(4):
 			scatter(imap[classe==k,0], imap[classe==k,1], color = next(color), label = order[k])
 		legend()		
@@ -199,7 +202,7 @@ for a in allreg.keys():
 		clus[a][i] = data
 
 figure()
-gs = GridSpec(2,2)
+gs = GridSpec(2,3)
 
 grps = struct.groupby('struct').groups
 
@@ -232,10 +235,10 @@ for a in allreg.keys():
 		corr[i,j] = np.sum(n_sessions_detected == np.max(n_sessions_detected))/len(n_sessions_detected)
 		corr[j,i] = corr[i,j]
 
-figure()
-subplot(121)
-imshow(corr)
-subplot(122)
-plot(range(3), corr[0,1:])
-plot(range(1,3),corr[1,2:])
-show()
+	figure()
+	subplot(121)
+	imshow(corr)
+	subplot(122)
+	plot(range(3), corr[0,1:])
+	plot(range(1,3),corr[1,2:])
+	show()

@@ -18,7 +18,7 @@ data_directory = '/mnt/DataRAID/MINISCOPE'
 
 ############################################################
 
-fbasename = 'A6512'
+fbasename = 'A0643'
 info = pd.read_csv('/home/guillaume/PSBImaging/python/datasets_'+fbasename+'.csv', comment = '#', header = 5, delimiter = ',', index_col=False, usecols = [0,2,3,4]).dropna()
 paths = [os.path.join(data_directory, fbasename[0:3] + '00', fbasename, fbasename+'-'+info.loc[i,'Recording day'][2:].replace('/', '')) for i in info.index]
 sessions = [fbasename+'-'+info.loc[i,'Recording day'][2:].replace('/', '') for i in info.index]
@@ -42,31 +42,33 @@ total_reg = []
 
 for i in range(len(info)):
 	arrays = {}
-	matfile = h5py.File(os.path.join(path, 'cellRegistered_'+str(i+1)+'.mat'), 'r')
-	for k, v in matfile.items():
-	    arrays[k] = v
-	cellreg = np.copy(np.array(arrays['cell_registered_struct']['cell_to_index_map']))
-	scores = np.copy(np.array(arrays['cell_registered_struct']['cell_scores']))
-	matfile.close()
-	cellreg = cellreg.T - 1 
-	cellreg = cellreg.astype(np.int)
-	scores = scores.flatten()
+	if os.path.exists(os.path.join(path, 'cellRegistered_'+str(i+1)+'.mat')):
+		matfile = h5py.File(os.path.join(path, 'cellRegistered_'+str(i+1)+'.mat'), 'r')
+		for k, v in matfile.items():
+		    arrays[k] = v
+		cellreg = np.copy(np.array(arrays['cell_registered_struct']['cell_to_index_map']))
+		scores = np.copy(np.array(arrays['cell_registered_struct']['cell_scores']))
+		matfile.close()
+		cellreg = cellreg.T - 1 
+		cellreg = cellreg.astype(np.int)
+		scores = scores.flatten()
 
-	cellregref[i] = cellreg
-	scoresref[i] = scores
-	mean_scores.append(np.mean(scores[scores<1]))
-	num_cells.append(cellreg.shape[0])
-	ratio.append(np.sum(cellreg>-1)/np.sum(cellreg==-1))
+		cellregref[i] = cellreg
+		scoresref[i] = scores
+		mean_scores.append(np.mean(scores[scores<1]))
+		num_cells.append(cellreg.shape[0])
+		ratio.append(np.sum(cellreg>-1)/np.sum(cellreg==-1))
 
-	total = []
+		total = []
 
-	for j in range(cellreg.shape[1]):
-		tmp = cellreg[cellreg[:,j]>-1,:]
-		total.append(np.sum(tmp>-1,1)/cellreg.shape[1])
+		for j in range(cellreg.shape[1]):
+			tmp = cellreg[cellreg[:,j]>-1,:]
+			total.append(np.sum(tmp>-1,1)/cellreg.shape[1])
 
-	total_reg.append(np.hstack(total))
+		total_reg.append(np.hstack(total))
 
 
 mean_total_reg = [np.mean(tmp) for tmp in total_reg]
 
 plot(mean_total_reg, 'o')
+show()

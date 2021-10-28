@@ -24,7 +24,7 @@ data_directory = '/mnt/DataRAID/MINISCOPE'
 ############################################################
 # ANIMAL INFO
 ############################################################
-fbasename = 'A0642'
+fbasename = 'A0643'
 info = pd.read_csv('/home/guillaume/PSBImaging/python/datasets_'+fbasename+'.csv', comment = '#', header = 5, delimiter = ',', index_col=False, usecols = [0,2,3,4]).dropna()
 paths = [os.path.join(data_directory, fbasename[0:3] + '00', fbasename, fbasename+'-'+info.loc[i,'Recording day'][2:].replace('/', '')) for i in info.index]
 sessions = [fbasename+'-'+info.loc[i,'Recording day'][2:].replace('/', '') for i in info.index]
@@ -36,6 +36,8 @@ if fbasename == 'A0634':
 	dims = (166, 136)
 elif fbasename == 'A0642':
 	dims = (201, 211)
+elif fbasename == 'A0643':
+	dims = (186,186)
 
 ############################################################
 # LOADING DATA
@@ -153,11 +155,12 @@ for i, o in enumerate(order):
 	for j, s in enumerate(envs[o][0:n_envs]):		
 		tc = np.array([alltc[n][s].values for k, n in enumerate(norder) if ~np.isnan(alltc[n][s].values[0])])
 		#tc = (tc.T/tc.max(1)).T
-		tc2 = gaussian_filter(tc, 2)		
-		ax = subplot(gs2[1,j], aspect = 'equal')
-		#noaxis(ax)
-		imshow(tc2, cmap = 'jet')
-		xticks([])
+		tc2 = gaussian_filter(tc, 2)	
+		if len(tc2):	
+			ax = subplot(gs2[1,j], aspect = 'equal')
+			#noaxis(ax)
+			imshow(tc2, cmap = 'jet', aspect = 'auto')
+			xticks([])
 		
 savefig('../figures/figure_psb_'+fbasename+'_1.pdf', format = 'pdf', dpi = 200, bbox_inches = 'tight')
 

@@ -313,3 +313,337 @@ def loadInfos(data_directory, sessions_dir, animals):
 		infos[fbasename] = info
 
 	return infos
+
+
+def loadNeuropixel(path, index=None, fs = 20000):
+	if not os.path.exists(path):
+		print("The path "+path+" doesn't exist; Exiting ...")
+		sys.exit()    
+	new_path = os.path.join(path, 'Analysis/')
+	if os.path.exists(new_path):		
+		files        = os.listdir(new_path)
+		if 'SpikeData.mat' in files:
+			spikedata     = scipy.io.loadmat(new_path+'SpikeData.mat')
+			spikes         = {}
+			n_neurons = len(spikedata['S'][0][0][0])
+			for i in range(n_neurons):
+				spikes[i]     = nts.Ts(spikedata['S'][0][0][0][i][0][0][0][1][0][0][2], time_units = 's')
+
+	return spikes
+
+def makeEpochs(path, order, file = None, start=None, end = None, time_units = 's'):
+	"""
+	The pre-processing pipeline should spit out a csv file containing all the successive epoch of sleep/wake
+	This function will load the csv and write neuroseries.IntervalSet of wake and sleep in /Analysis/BehavEpochs.h5
+	If no csv exists, it's still possible to give by hand the start and end of the epochs
+	Notes:
+		The function assumes no header on the csv file
+	Args:
+		path: string
+		order: list
+		file: string
+		start: list/array (optional)
+		end: list/array (optional)
+		time_units: string (optional)
+	Return: 
+		none
+	"""		
+	if not os.path.exists(path):
+		print("The path "+path+" doesn't exist; Exiting ...")
+		sys.exit()	
+	if file:
+		listdir 	= os.listdir(path)	
+		if file not in listdir:
+			print("The file "+file+" cannot be found in the path "+path)
+			sys.exit()			
+		filepath 	= os.path.join(path, file)
+		epochs 		= pd.read_csv(filepath, header = None)
+	elif file is None and len(start) and len(end):
+		epochs = pd.DataFrame(np.vstack((start, end)).T)
+	elif file is None and start is None and end is None:
+		print("You have to specify either a file or arrays of start and end; Exiting ...")
+		sys.exit()
+	
+	# Creating /Analysis/ Folder here if not already present
+	new_path	= os.path.join(path, 'Analysis/')
+	if not os.path.exists(new_path): os.makedirs(new_path)
+	# Writing to BehavEpochs.h5
+	new_file 	= os.path.join(new_path, 'BehavEpochs.h5')
+	store 		= pd.HDFStore(new_file, 'a')
+	epoch 		= np.unique(order)
+	for i, n in enumerate(epoch):
+		idx = np.where(np.array(order) == n)[0]
+		ep = nts.IntervalSet(start = epochs.loc[idx,0],
+							end = epochs.loc[idx,1],
+							time_units = time_units)
+		store[n] = pd.DataFrame(ep)
+	store.close()
+
+	return None
+
+def makePositions_NeuroPixel(path, file_order, episodes, names = ['ry', 'rx', 'rz', 'x', 'y', 'z'], update_wake_epoch = True):
+	"""
+	Assuming that makeEpochs has been runned and a file BehavEpochs.h5 can be 
+	found in /Analysis/, this function will look into path for analogin file 
+	containing the TTL pulses. The position time for all events will thus be
+	updated and saved in Analysis/Position.h5.
+	BehavEpochs.h5 will although be updated to match the time between optitrack
+	and intan
+	
+	Notes:
+		The function assumes headers on the csv file of the position in the following order:
+			['ry', 'rx', 'rz', 'x', 'y', 'z']
+	Args:
+		path: string
+		file_order: list
+		names: list
+	Return: 
+		None
+	""" 
+	if not os.path.exists(path):
+		print("The path "+path+" doesn't exist; Exiting ...")
+		sys.exit()
+	files = os.listdir(path)
+	for f in file_order:
+		if not np.any([f+'.csv' in g for g in files]):
+			print("Could not find "+f+'.csv; Exiting ...')
+			sys.exit()    
+	new_path = os.path.join(path, 'Analysis/')
+	if not os.path.exists(new_path): os.makedirs(new_path)                
+	file_epoch = os.path.join(path, 'Analysis', 'BehavEpochs.h5')
+	if os.path.exists(file_epoch):
+		wake_ep = loadEpoch(path, 'wake')
+	else:
+		makeEpochs(path, episodes, file = 'Epoch_TS.csv')
+		wake_ep = loadEpoch(path, 'wake')
+	if len(wake_ep) != len(file_order):
+		print("Number of wake episodes doesn't match; Exiting...")
+		sys.exit()
+
+	
+
+	# HACK FOR NEUROPIXEL
+	# LOADING THE TTL FROM THE NIDQ DAT FILE
+	file = os.path.join(path, [f for f in files if 'nidq.dat' in f][0])
+	f = open(file, 'rb')
+	startoffile = f.seek(0, 0)
+	endoffile = f.seek(0, 2)
+	bytes_size = 1
+	n_samples = int((endoffile-startoffile)/2/bytes_size)	
+	f.close()
+
+	with open(file, 'rb') as f:
+		data = np.fromfile(f, np.uint8).reshape((n_samples, 2))[:,0]
+
+	data = data.astype(np.int32)
+
+	peaks,_ = scipy.signal.find_peaks(np.diff(data), height=50)
+	timestep = np.arange(0, len(data))/25000
+	# analogin = pd.Series(index = timestep, data = data)
+	peaks+=1
+	ttl = pd.Series(index = timestep[peaks], data = data[peaks])    
+	ttl = nts.Ts(t= ttl.index.values, time_units = 's')
+
+	frames = []	
+
+	for i, f in enumerate(file_order):		
+		csv_file = os.path.join(path, "".join(s for s in files if f+'.csv' in s))
+		position = pd.read_csv(csv_file, header = [4,5], index_col = 1)
+		if 1 in position.columns:
+			position = position.drop(labels = 1, axis = 1)
+		position = position[~position.index.duplicated(keep='first')]
+
+		ttle = ttl.restrict(wake_ep.loc[[i]])
+					
+		length = np.minimum(len(ttle), len(position))
+		ttle = ttle.iloc[0:length]
+		position = position.iloc[0:length]
+				
+		position.index = ttle.index
+		wake_ep.iloc[i,0] = np.int64(np.maximum(wake_ep.iloc[i,0], position.index[0]))
+		wake_ep.iloc[i,1] = np.int64(np.minimum(wake_ep.iloc[i,1], position.index[-1]))
+
+		# putting columns in the right order 
+		order = []
+		for n in position.columns:
+			if n[0] == 'Rotation':
+				order.append('r'+n[1].lower())
+			elif n[0] == 'Position':
+				order.append(n[1].lower())
+			else:
+				print('Unknow csv file for position; Exiting')
+				sys.exit()
+
+		position.columns = order
+		position = position[names]
+
+		frames.append(position)
+
+
+	
+	position = pd.concat(frames)	
+	position.columns = names
+	position[['ry', 'rx', 'rz']] *= (np.pi/180)
+	position[['ry', 'rx', 'rz']] += 2*np.pi
+	position[['ry', 'rx', 'rz']] %= 2*np.pi
+
+	position = nts.TsdFrame(position)
+	
+
+	if update_wake_epoch:
+		store = pd.HDFStore(file_epoch, 'a')
+		store['wake'] = pd.DataFrame(wake_ep)
+		store.close()
+	
+	position_file = os.path.join(path, 'Analysis', 'Position.h5')
+	store = pd.HDFStore(position_file, 'w')
+	store['position'] = position.as_units('s')
+	store.close()
+	
+	return
+
+def loadEpoch(path, epoch, episodes = None):
+	"""
+	load the epoch contained in path	
+	If the path contains a folder analysis, the function will load either the BehavEpochs.mat or the BehavEpochs.h5
+	Run makeEpochs(data_directory, ['sleep', 'wake', 'sleep', 'wake'], file='Epoch_TS.csv') to create the BehavEpochs.h5
+
+	Args:
+		path: string
+		epoch: string
+
+	Returns:
+		neuroseries.IntervalSet
+	"""			
+	if not os.path.exists(path): # Check for path
+		print("The path "+path+" doesn't exist; Exiting ...")
+		sys.exit()
+	if epoch in ['sws', 'rem']: 		
+		# loading the .epoch.evt file
+		file = os.path.join(path,os.path.basename(path)+'.'+epoch+'.evt')
+		if os.path.exists(file):
+			tmp = np.genfromtxt(file)[:,0]
+			tmp = tmp.reshape(len(tmp)//2,2)/1000
+			ep = nts.IntervalSet(start = tmp[:,0], end = tmp[:,1], time_units = 's')
+			# TO make sure it's only in sleep since using the TheStateEditor
+			sleep_ep = loadEpoch(path, 'sleep')
+			ep = sleep_ep.intersect(ep)
+			return ep
+		else:
+			print("The file ", file, "does not exist; Exiting ...")
+			sys.exit()
+	elif epoch == 'wake.evt.theta':
+		file = os.path.join(path,os.path.basename(path)+'.'+epoch)
+		if os.path.exists(file):
+			tmp = np.genfromtxt(file)[:,0]
+			tmp = tmp.reshape(len(tmp)//2,2)/1000
+			ep = nts.IntervalSet(start = tmp[:,0], end = tmp[:,1], time_units = 's')
+			return ep
+		else:
+			print("The file ", file, "does not exist; Exiting ...")
+	filepath 	= os.path.join(path, 'Analysis')
+	if os.path.exists(filepath): # Check for path/Analysis/	
+		listdir		= os.listdir(filepath)
+		file 		= [f for f in listdir if 'BehavEpochs' in f]
+	if len(file) == 0: # Running makeEpochs		
+		makeEpochs(path, episodes, file = 'Epoch_TS.csv')
+		listdir		= os.listdir(filepath)
+		file 		= [f for f in listdir if 'BehavEpochs' in f]
+	if file[0] == 'BehavEpochs.h5':
+		new_file = os.path.join(filepath, 'BehavEpochs.h5')
+		store 		= pd.HDFStore(new_file, 'r')
+		if '/'+epoch in store.keys():
+			ep = store[epoch]
+			store.close()
+			return nts.IntervalSet(ep)
+		else:
+			print("The file BehavEpochs.h5 does not contain the key "+epoch+"; Exiting ...")
+			sys.exit()
+	elif file[0] == 'BehavEpochs.mat':
+		behepochs = scipy.io.loadmat(os.path.join(filepath,file[0]))
+		if epoch == 'wake':
+			wake_ep = np.hstack([behepochs['wakeEp'][0][0][1],behepochs['wakeEp'][0][0][2]])
+			return nts.IntervalSet(wake_ep[:,0], wake_ep[:,1], time_units = 's').drop_short_intervals(0.0)
+		elif epoch == 'sleep':
+			sleep_pre_ep, sleep_post_ep = [], []
+			if 'sleepPreEp' in behepochs.keys():
+				sleep_pre_ep = behepochs['sleepPreEp'][0][0]
+				sleep_pre_ep = np.hstack([sleep_pre_ep[1],sleep_pre_ep[2]])
+				sleep_pre_ep_index = behepochs['sleepPreEpIx'][0]
+			if 'sleepPostEp' in behepochs.keys():
+				sleep_post_ep = behepochs['sleepPostEp'][0][0]
+				sleep_post_ep = np.hstack([sleep_post_ep[1],sleep_post_ep[2]])
+				sleep_post_ep_index = behepochs['sleepPostEpIx'][0]
+			if len(sleep_pre_ep) and len(sleep_post_ep):
+				sleep_ep = np.vstack((sleep_pre_ep, sleep_post_ep))
+			elif len(sleep_pre_ep):
+				sleep_ep = sleep_pre_ep
+			elif len(sleep_post_ep):
+				sleep_ep = sleep_post_ep						
+			return nts.IntervalSet(sleep_ep[:,0], sleep_ep[:,1], time_units = 's')
+		###################################
+		# WORKS ONLY FOR MATLAB FROM HERE #
+		###################################		
+		elif epoch == 'sws':
+			sampling_freq = 1250
+			new_listdir = os.listdir(path)
+			for f in new_listdir:
+				if 'sts.SWS' in f:
+					sws = np.genfromtxt(os.path.join(path,f))/float(sampling_freq)
+					return nts.IntervalSet.drop_short_intervals(nts.IntervalSet(sws[:,0], sws[:,1], time_units = 's'), 0.0)
+
+				elif '-states.mat' in f:
+					sws = scipy.io.loadmat(os.path.join(path,f))['states'][0]
+					index = np.logical_or(sws == 2, sws == 3)*1.0
+					index = index[1:] - index[0:-1]
+					start = np.where(index == 1)[0]+1
+					stop = np.where(index == -1)[0]
+					return nts.IntervalSet.drop_short_intervals(nts.IntervalSet(start, stop, time_units = 's', expect_fix=True), 0.0)
+
+		elif epoch == 'rem':
+			sampling_freq = 1250
+			new_listdir = os.listdir(path)
+			for f in new_listdir:
+				if 'sts.REM' in f:
+					rem = np.genfromtxt(os.path.join(path,f))/float(sampling_freq)
+					return nts.IntervalSet(rem[:,0], rem[:,1], time_units = 's').drop_short_intervals(0.0)
+
+				elif '-states/m' in listdir:
+					rem = scipy.io.loadmat(path+f)['states'][0]
+					index = (rem == 5)*1.0
+					index = index[1:] - index[0:-1]
+					start = np.where(index == 1)[0]+1
+					stop = np.where(index == -1)[0]
+					return nts.IntervalSet(start, stop, time_units = 's', expect_fix=True).drop_short_intervals(0.0)
+
+def loadPosition_NeuroPixel(path, events = None, episodes = None):
+	"""
+	load the position contained in /Analysis/Position.h5
+
+	Notes:
+		The order of the columns is assumed to be
+			['ry', 'rx', 'rz', 'x', 'y', 'z']
+	Args:
+		path: string
+		
+	Returns:
+		neuroseries.TsdFrame
+	"""        
+	if not os.path.exists(path): # Checking for path
+		print("The path "+path+" doesn't exist; Exiting ...")
+		sys.exit()
+	new_path = os.path.join(path, 'Analysis')
+	if not os.path.exists(new_path): os.mkdir(new_path)
+	file = os.path.join(path, 'Analysis', 'Position.h5')
+	if not os.path.exists(file):
+		makePositions_NeuroPixel(path, events, episodes)
+	if os.path.exists(file):
+		store = pd.HDFStore(file, 'r')
+		position = store['position']
+		store.close()
+		position = nts.TsdFrame(t = position.index.values, d = position.values, columns = position.columns, time_units = 's')
+		return position
+	else:
+		print("Cannot find "+file+" for loading position")
+		sys.exit()    	
+

@@ -77,9 +77,9 @@ def findHDCells(tuning_curves, z = 50, p = 0.0001 , m = 0):
 	stat = pd.DataFrame(index = tuning_curves.columns, columns = ['pval', 'z'])
 	for k in tuning_curves:
 		stat.loc[k] = rayleigh(tuning_curves[k].index.values, tuning_curves[k].values)
-	# cond2 = np.logical_and(stat['pval']<p,stat['z']>z)
-	# tokeep = stat.index.values[np.where(np.logical_and(cond1, cond2))[0]]	
-	tokeep = stat[stat['z']>p].index.values
+	cond2 = np.logical_and(stat['pval']<p,stat['z']>z)
+	tokeep = stat.index.values[np.where(np.logical_and(cond1, cond2))[0]]	
+	#tokeep = stat[stat['z']>p].index.values
 	return tokeep, stat
 
 def computeSpatialInfo(tc, angle):
@@ -333,3 +333,25 @@ def getColoredFootprints(A, peaks, thr, nb_bins = 5):
 		colorA[A[i] > thr] = RGB[i]
 
 	return colorA	
+
+
+def computeAngularTuningCurves(spikes, angle, ep, nb_bins = 180, frequency = 120.0):
+	bins 			= np.linspace(0, 2*np.pi, nb_bins)
+	idx 			= bins[0:-1]+np.diff(bins)/2
+	tuning_curves 	= pd.DataFrame(index = idx, columns = list(spikes.keys()))	
+	angle 			= angle.restrict(ep)
+	# Smoothing the angle here
+	tmp 			= pd.Series(index = angle.index.values, data = np.unwrap(angle.values))
+	tmp2 			= tmp.rolling(window=50,win_type='gaussian',center=True,min_periods=1).mean(std=10.0)
+	angle			= nts.Tsd(tmp2%(2*np.pi))
+	for k in spikes:
+		spks 			= spikes[k]
+		# true_ep 		= nts.IntervalSet(start = np.maximum(angle.index[0], spks.index[0]), end = np.minimum(angle.index[-1], spks.index[-1]))		
+		spks 			= spks.restrict(ep)	
+		angle_spike 	= angle.restrict(ep).realign(spks)
+		spike_count, bin_edges = np.histogram(angle_spike, bins)
+		occupancy, _ 	= np.histogram(angle, bins)
+		spike_count 	= spike_count/occupancy		
+		tuning_curves[k] = spike_count*frequency	
+
+	return tuning_curves
