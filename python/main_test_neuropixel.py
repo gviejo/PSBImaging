@@ -11,12 +11,23 @@ from matplotlib.colors import hsv_to_rgb
 from umap import UMAP
 from sklearn.manifold import Isomap
 
-data_directory = '/mnt/Data2/PSB/A8603/A8603-210602'
 
-#episodes = ['sleep', 'wake']
-episodes = ['sleep', 'wake', 'sleep', 'wake', 'sleep']
+def plotTuningCurves(tcurves, tokeep = []):	
+	figure()
+	for i in tcurves.columns:
+		subplot(int(np.ceil(np.sqrt(tcurves.shape[1]))),int(np.ceil(np.sqrt(tcurves.shape[1]))),i+1, projection='polar')
+		plot(tcurves[i])
+		xticks([])
+		yticks([])
+	return
 
-events = ['1', '3']
+data_directory = '/media/guillaume/Elements/A8607-220102'
+
+
+#episodes = ['sleep', 'wake', 'sleep', 'wake', 'sleep']
+#events = ['1', '3']
+episodes = ['sleep', 'wake']
+events = ['1']
 
 
 
@@ -26,12 +37,96 @@ position 			= loadPosition_NeuroPixel(data_directory, events, episodes)
 wake_ep 			= loadEpoch(data_directory, 'wake', episodes)
 sleep_ep 			= loadEpoch(data_directory, 'sleep')					
 
+#spikes = {n:spikes[n] for n in np.arange(0, 83)}
 
 tuning_curves 	= computeAngularTuningCurves(spikes, position['ry'], wake_ep.loc[[0]], 60)
+#tuning_curves2 	= computeAngularTuningCurves(spikes, position['ry'], wake_ep.loc[[1]], 60)
+
+tuning_curves = smoothAngularTuningCurves(tuning_curves, window = 20, deviation = 2.0)
 
 tokeep, stat 	= findHDCells(tuning_curves, z = 10, p = 0.0001 , m = 2)
 
 
+plotTuningCurves(tuning_curves)
+
+sys.exit()
+
+#tokeep = np.array([1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 18, 20, 21, 22, 24, 25, 26, 27, 28, 29, 30, 35, 37, 38, 40, 42, 43, 44, 45, 46, 48, 50, 52, 53, 56, 57, 58, 60, 62, 64, 65, 67, 69, 70, 72, 74, 75, 76, 80, 81])
+
+mean_fr = computeMeanFiringRate(spikes, [wake_ep.loc[[i]] for i in wake_ep.index], ['wake1', 'wake2'])
+mean_fr = mean_fr.loc[tokeep]
+peak_fr = pd.concat([tuning_curves[tokeep].max(), tuning_curves2[tokeep].max()], 1)
+
+figure()
+subplot(231)
+plot(mean_fr['wake1'], mean_fr['wake2'], 'o')
+subplot(232)
+plot((mean_fr['wake2'] - mean_fr['wake1']).sort_values().values, '.-')
+subplot(233)
+[plot(np.arange(2), np.log(mean_fr.loc[i].values)) for i in mean_fr.index]
+
+subplot(234)
+plot(peak_fr[0], peak_fr[1], 'o')
+subplot(235)
+plot((peak_fr[1] - peak_fr[0]).sort_values().values, '.-')
+subplot(236)
+[plot(np.arange(2), np.log(peak_fr.loc[i].values)) for i in mean_fr.index]
+
+# Dropping neurons with a difference of peak fireing rate larger than 10 Hz
+
+tokeep = tokeep[np.abs(peak_fr[1] - peak_fr[0])<10]
+#tokeep = tokeep[np.abs(mean_fr['wake1'] - mean_fr['wake2'])<2]
+
+print(len(tokeep))
+
+
+
+
+show()
+
+sys.exit()
+#############################################################
+# CROSS CORRS
+#############################################################
+cc1 = compute_CrossCorrs({n:spikes[n] for n in tokeep}, wake_ep.loc[[0]], binsize=5, nbins = 200, norm = True)
+cc2 = compute_CrossCorrs({n:spikes[n] for n in tokeep}, wake_ep.loc[[1]], binsize=5, nbins = 200, norm = True)
+cc1 = cc1.rolling(window=20, win_type='gaussian', center = True, min_periods = 1).mean(std = 2.0)
+cc2 = cc2.rolling(window=20, win_type='gaussian', center = True, min_periods = 1).mean(std = 2.0)
+
+
+tcurves = tuning_curves[tokeep]
+peaks = pd.Series(index=tcurves.columns,data = np.array([circmean(tcurves.index.values, tcurves[i].values) for i in tcurves.columns])).sort_values()		
+
+new_index = cc1.columns
+pairs = pd.Series(index = new_index)
+for i,j in pairs.index:	
+	a = peaks[i] - peaks[j]
+	pairs[(i,j)] = np.minimum(np.abs(a), 2*np.pi - np.abs(a))
+
+pairs = pairs.dropna().sort_values()
+
+figure()
+for i, cc in enumerate([cc1, cc2]):
+	subplot(1,2,i+1)
+	imshow(cc[pairs.index].T, aspect = 'auto', cmap = 'jet', interpolation = 'bilinear')
+	xticks([0, np.where(cc.index.values == 0)[0][0], len(cc)], [cc.index[0], 0, cc.index[-1]])
+
+show()
+
+tcurves = tuning_curves2[tokeep]
+peaks2 = pd.Series(index=tcurves.columns,data = np.array([circmean(tcurves.index.values, tcurves[i].values) for i in tcurves.columns])).sort_values()		
+
+pairs2 = pd.Series(index = new_index)
+for i,j in pairs2.index:	
+	a = peaks2[i] - peaks2[j]
+	pairs2[(i,j)] = np.minimum(np.abs(a), 2*np.pi - np.abs(a))
+
+
+
+
+#############################################################
+# UMAP
+#############################################################
 # binning spike train
 bin_size = 300
 
@@ -123,3 +218,14 @@ for i, n in enumerate(np.unique(sessions)):
 
 
 show()
+
+
+
+
+
+
+
+
+
+
+

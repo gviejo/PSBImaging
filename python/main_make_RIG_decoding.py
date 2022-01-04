@@ -53,7 +53,7 @@ for a in infos.keys():
 	n_sessions_detected = np.sum(cellreg!=-1, 1)
 	
 	# Detected in at least 1 session
-	tokeep = np.where(n_sessions_detected > 3)[0]
+	tokeep = np.where(n_sessions_detected > 5)[0]
 
 	# Good Cell reg scores 
 	tokeep = tokeep[scores[tokeep]>0.8]
@@ -66,19 +66,19 @@ for a in infos.keys():
 			allst[i][j] = allinfo[list(allinfo.keys())[j]]['halfcorr'].loc[cellreg[i,j]]
 
 	allst = pd.concat(allst, 1).T
-	allst[allst<0.1] = np.nan
+	allst[allst<0.2] = np.nan
 	tokeep = allst[allst.notna().any(1)].index.values
-	
-	# Selecting HD cells
-	alltc = {}
-	for i in tokeep: # neuron index
-		alltc[i] = pd.DataFrame(columns = sessions)
-		for j in np.where(cellreg[i]!=-1)[0]:
-			alltc[i][sessions[j]] = TC[list(TC.keys())[j]][cellreg[i,j]]
+		
 
-	std = findSinglePeakHDCell(alltc, sessions)
-	#std[std>0.7] = np.nan
-	#tokeep = std.dropna(0).index.values
+	# Selecting HD cells
+	# alltc = {}
+	# for i in tokeep: # neuron index
+	# 	alltc[i] = pd.DataFrame(columns = sessions)
+	# 	for j in np.where(cellreg[i]!=-1)[0]:
+	# 		alltc[i][sessions[j]] = TC[list(TC.keys())[j]][cellreg[i,j]]
+
+	# std = findSinglePeakHDCell(alltc, sessions)	
+	# tokeep = std.index[std.mean(1) < std.mean(1).quantile(0.8)]
 
 	print(len(tokeep))
 
@@ -95,9 +95,14 @@ clus = {}
 for a in allreg.keys():
 	tmp = allreg[a].copy()
 	tmp[tmp > -1] = 1
-	imap = UMAP(n_neighbors = 5, min_dist = 0.1).fit_transform(tmp.T)
+	# keeping sessions with less than 50 % of -1
+	p = np.sum(tmp==-1, 0)/len(tmp)
+	good_sessions = np.where(p < 0.5)[0]
+	imap = UMAP(n_neighbors = 6, min_dist = 0.0).fit_transform(tmp[:,good_sessions].T)
+	#imap = TSNE(n_components = 2, perplexity = 1).fit_transform(tmp.T)
+	#imap = Isomap(n_components = 2, n_neighbors = 20).fit_transform(tmp.T)
 	classe = np.array([list(order).index(e) for e in infos[a]['Rig'].values])
-	data = pd.DataFrame(index = classe, data = imap)
+	data = pd.DataFrame(index = classe[good_sessions], data = imap)
 	clus[a] = data
 
 
@@ -115,6 +120,30 @@ for a in allreg.keys():
 		corr[i,j] = np.sum(np.prod(tmp[:,[i,j]], 1)==1) / tmp.shape[0]
 		corr[j,i] = corr[i,j]
 	allcorr[a] = pd.DataFrame(index = classe, columns = classe, data = corr)
+
+
+
+figure()
+gs = GridSpec(1,2)
+
+############### 
+# DIFFERENT ENVS
+grps = struct.groupby('struct').groups
+
+for j, a in enumerate(grps['psb']):
+	subplot(gs[0,j])
+	color = iter(cm.rainbow(np.linspace(0, 1, len(order))))	
+	classe = clus[a].index.values
+	imap = clus[a].values		
+	for k in range(4):
+		scatter(imap[classe==k,0], imap[classe==k,1], color = next(color), label = order[k])
+	legend()		
+	title(a)
+
+show()
+
+
+sys.exit()
 
 
 

@@ -7,7 +7,7 @@ import scipy
 from scipy import signal
 from itertools import combinations
 from pycircstat.descriptive import mean as circmean
-
+from pylab import *
 
 '''
 Utilities functions
@@ -355,3 +355,91 @@ def computeAngularTuningCurves(spikes, angle, ep, nb_bins = 180, frequency = 120
 		tuning_curves[k] = spike_count*frequency	
 
 	return tuning_curves
+
+def computeMeanFiringRate(spikes, epochs, name):
+	mean_frate = pd.DataFrame(index = spikes.keys(), columns = name, dtype = np.float32)
+	for n, ep in zip(name, epochs):
+		for k in spikes:
+			mean_frate.loc[k,n] = len(spikes[k].restrict(ep))/ep.tot_length('s')
+	return mean_frate
+
+
+#########################################################
+# CORRELATION
+#########################################################
+@jit(nopython=True)
+def crossCorr(t1, t2, binsize, nbins):
+	''' 
+		Fast crossCorr 
+	'''
+	nt1 = len(t1)
+	nt2 = len(t2)
+	if np.floor(nbins/2)*2 == nbins:
+		nbins = nbins+1
+
+	m = -binsize*((nbins+1)/2)
+	B = np.zeros(nbins)
+	for j in range(nbins):
+		B[j] = m+j*binsize
+
+	w = ((nbins/2) * binsize)
+	C = np.zeros(nbins)
+	i2 = 1
+
+	for i1 in range(nt1):
+		lbound = t1[i1] - w
+		while i2 < nt2 and t2[i2] < lbound:
+			i2 = i2+1
+		while i2 > 1 and t2[i2-1] > lbound:
+			i2 = i2-1
+
+		rbound = lbound
+		l = i2
+		for j in range(nbins):
+			k = 0
+			rbound = rbound+binsize
+			while l < nt2 and t2[l] < rbound:
+				l = l+1
+				k = k+1
+
+			C[j] += k
+
+	# for j in range(nbins):
+	# C[j] = C[j] / (nt1 * binsize)
+	C = C/(nt1 * binsize/1000)
+
+	return C
+
+
+def compute_CrossCorrs(spks, ep, binsize=10, nbins = 2000, norm = False):
+	"""
+		
+	"""	
+	neurons = list(spks.keys())
+	times = np.arange(0, binsize*(nbins+1), binsize) - (nbins*binsize)/2
+	cc = pd.DataFrame(index = times, columns = list(combinations(neurons, 2)))
+		
+	for i,j in cc.columns:		
+		spk1 = spks[i].restrict(ep).as_units('ms').index.values
+		spk2 = spks[j].restrict(ep).as_units('ms').index.values		
+		tmp = crossCorr(spk1, spk2, binsize, nbins)		
+		fr = len(spk2)/ep.tot_length('s')
+		if norm:
+			cc[(i,j)] = tmp/fr
+		else:
+			cc[(i,j)] = tmp
+	return cc
+
+def plotTuningCurves(tcurves, tcurves2, tokeep):
+	figure()
+	for i in range(len(tcurves.columns)):	
+		subplot(int(np.ceil(np.sqrt(tcurves.shape[1]))),int(np.ceil(np.sqrt(tcurves.shape[1]))),i+1, projection='polar')		
+		plot(tcurves.iloc[:,i])
+		plot(tcurves2.iloc[:,i])
+		if tcurves.columns[i] in tokeep:
+			plot(tcurves.iloc[:,i], linewidth = 3)
+			plot(tcurves2.iloc[:,i], linewidth = 3)
+		xticks([0], [tcurves.columns[i]])
+		yticks([])		
+	show()
+	return

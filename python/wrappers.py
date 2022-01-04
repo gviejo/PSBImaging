@@ -420,7 +420,8 @@ def makePositions_NeuroPixel(path, file_order, episodes, names = ['ry', 'rx', 'r
 		print("Number of wake episodes doesn't match; Exiting...")
 		sys.exit()
 
-	
+	print(path)
+	print(file_order)
 
 	# HACK FOR NEUROPIXEL
 	# LOADING THE TTL FROM THE NIDQ DAT FILE
@@ -460,6 +461,7 @@ def makePositions_NeuroPixel(path, file_order, episodes, names = ['ry', 'rx', 'r
 		position = position.iloc[0:length]
 				
 		position.index = ttle.index
+		print(position.index)
 		wake_ep.iloc[i,0] = np.int64(np.maximum(wake_ep.iloc[i,0], position.index[0]))
 		wake_ep.iloc[i,1] = np.int64(np.minimum(wake_ep.iloc[i,1], position.index[-1]))
 
