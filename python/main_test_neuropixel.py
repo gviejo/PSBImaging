@@ -21,13 +21,24 @@ def plotTuningCurves(tcurves, tokeep = []):
 		yticks([])
 	return
 
-data_directory = '/media/guillaume/Elements/A8607-220102'
+def plotTuningCurvesList(alltc, tokeep = []):	
+	tcurves = alltc[0]
+	figure()
+	for i in tcurves.columns:
+		subplot(int(np.ceil(np.sqrt(tcurves.shape[1]))),int(np.ceil(np.sqrt(tcurves.shape[1]))),i+1, projection='polar')		
+		for j in range(len(alltc)):			
+			plot(alltc[j][i])
+		xticks([])
+		yticks([])
+	return
+
+data_directory = '/media/guillaume/Sofia/Ephys/A8600-Neuropixel implants/A8607/A8607-220105'
 
 
 #episodes = ['sleep', 'wake', 'sleep', 'wake', 'sleep']
 #events = ['1', '3']
-episodes = ['sleep', 'wake']
-events = ['1']
+episodes = ['sleep', 'wake','wake','wake', 'sleep', 'wake', 'wake', 'wake', 'sleep']
+events = ['1','2','3','5','6','7']
 
 
 
@@ -39,16 +50,19 @@ sleep_ep 			= loadEpoch(data_directory, 'sleep')
 
 #spikes = {n:spikes[n] for n in np.arange(0, 83)}
 
-tuning_curves 	= computeAngularTuningCurves(spikes, position['ry'], wake_ep.loc[[0]], 60)
-#tuning_curves2 	= computeAngularTuningCurves(spikes, position['ry'], wake_ep.loc[[1]], 60)
+tuning_curvesall = {}
+for i in range(6):
+	tuning_curves = computeAngularTuningCurves(spikes, position['ry'], wake_ep.loc[[i]], 60)
+	tuning_curves = smoothAngularTuningCurves(tuning_curves, window = 20, deviation = 3.0)
+	tuning_curvesall[i] = tuning_curves
 
-tuning_curves = smoothAngularTuningCurves(tuning_curves, window = 20, deviation = 2.0)
-
-tokeep, stat 	= findHDCells(tuning_curves, z = 10, p = 0.0001 , m = 2)
+#tokeep, stat 	= findHDCells(tuning_curves, z = 10, p = 0.0001 , m = 2)
 
 
-plotTuningCurves(tuning_curves)
+#plotTuningCurves(tuning_curves1)
 
+plotTuningCurvesList([tuning_curvesall[0],tuning_curvesall[4]])
+show()
 sys.exit()
 
 #tokeep = np.array([1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 18, 20, 21, 22, 24, 25, 26, 27, 28, 29, 30, 35, 37, 38, 40, 42, 43, 44, 45, 46, 48, 50, 52, 53, 56, 57, 58, 60, 62, 64, 65, 67, 69, 70, 72, 74, 75, 76, 80, 81])
